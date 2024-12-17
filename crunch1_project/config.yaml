@@ -1,0 +1,32 @@
+# Project Configuration
+project:
+  name: "autoimmune-crunch1"                           # Project name for CrunchDAO
+  dataset_size: "default"                              # Options: "default" (small) or "large"
+
+paths:
+  # Data paths (external hard drive)
+  raw_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/data"          # Original downloaded data
+  interim_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/interim"   # Intermediate processing outputs
+  train_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/train"       # Train-ready processed data
+  test_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/test"         # Test-ready processed data
+  predictions_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/predictions"  # Final predictions for submission
+
+  # Token and code paths (WSL2)
+  token_file: "/home/secondbook5/projects/AutoImmuneML/.crunchdao/token"  # Crunch token file location
+  models_dir: "/home/secondbook5/projects/AutoImmuneML/crunch1_project/models"   # Active model directory for training
+  resources_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/resources"  # Pre-trained and saved models
+  logs_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/logs"         # Logs and debugging info
+  src_dir: "/home/secondbook5/projects/AutoImmuneML/crunch1_project/src"  # Reusable Python scripts
+  results_dir: "/home/secondbook5/projects/AutoImmuneML/crunch1_project/results"  # Outputs and model results
+
+training:
+  batch_size: 128                     # Batch size for training
+  num_workers: 4                      # Number of workers for data loading
+  target_patch_size: 32               # Size of patches extracted from images
+  seed: 42                            # Random seed for reproducibility
+  n_folds: 2                          # Number of folds for cross-validation
+  regression_alpha: 1.0               # Alpha parameter for Ridge Regression regularization
+  normalize: false                    # Whether to normalize gene expression data
+
+preprocessing:
+  sample_size: 10000                  # Number of cells to sample for training (None for full dataset)
