@@ -15,7 +15,7 @@ shap==0.46.0             # SHAP for explainable AI
 biopython==1.84          # Bioinformatics tools for biological data
 scanpy==1.10.4           # Single-cell RNA analysis (relies on anndata)
 anndata==0.11.1          # AnnData structure for single-cell omics
-squidpy==1.3.0           # Spatial omics data analysis (requires scanpy)
+squidpy          # Spatial omics data analysis (requires scanpy)
 spatialdata==0.2.6       # General toolkit for spatial omics data
 
 # Image and Spatial Libraries
@@ -48,3 +48,7 @@ distributed==2024.12.0   # Task scheduling for Dask
 ipykernel==6.29.5        # Jupyter kernel for interactive execution
 ipython==8.30.0          # Interactive Python shell
 jupyterlab==4.3.3        # JupyterLab IDE
+plotly~=5.24.1
+
+PyYAML~=6.0.2
+tqdm~=4.67.1
