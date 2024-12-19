@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor  # For multithreading
 from skimage.transform import rescale  # For resampling large images
 from typing import Optional, List, Dict  # For type annotations
 import concurrent.futures  # For managing exceptions during multithreading
-
+from threading import Lock # For thread-safe updates
 
 class SpatialDataHandler:
     """
@@ -57,79 +57,114 @@ class SpatialDataHandler:
         self.lazy_loaded_tables: Dict[str, pd.DataFrame] = {}  # Cache for lazily loaded tables
         print(f"Initialized handler for datasets: {zarr_paths}")  # Log initialization
 
-    def load_data(self) -> None:
+    def load_data(self, max_retries: int = 3) -> None:
         """
         Load all SpatialData objects from the provided Zarr files using multithreading.
 
+        Args:
+            max_retries (int): Maximum number of retries for failed dataset loads.
+
         Raises:
             FileNotFoundError: If a specified Zarr file is not found.
-            Exception: If any dataset fails to load, details are logged.
+            Exception: If any dataset consistently fails to load after retries.
         """
-        # Load all SpatialData objects from the specified Zarr files using multithreading
-
         def load_single_dataset(zarr_path: str) -> None:
-            # Load a single SpatialData object from a Zarr file
-            if not os.path.exists(zarr_path):  # Check if the file exists
-                raise FileNotFoundError(f"Zarr file not found: {zarr_path}")
-            try:
-                dataset_name = os.path.basename(zarr_path)  # Extract dataset name from path
-                print(f"Loading dataset: {zarr_path}...")  # Log loading start
-                dataset = sd.read_zarr(zarr_path)  # Load the SpatialData object
-                self.datasets[dataset_name] = dataset  # Store the dataset in the dictionary
-                print(f"Dataset '{dataset_name}' loaded successfully.")  # Log success
-            except Exception as e:
-                print(f"Failed to load dataset '{zarr_path}': {e}")  # Log errors
-                raise
+            """
+            Load a single SpatialData object from a Zarr file with retry logic.
 
-        errors = []  # List to keep track of errors during dataset loading
+            Args:
+                zarr_path (str): Path to the Zarr dataset.
+
+            Raises:
+                FileNotFoundError: If the file is not found.
+                Exception: If the dataset fails to load after retries.
+            """
+            nonlocal lock  # Access the shared lock for thread-safe updates
+            retries = 0
+            while retries < max_retries:
+                try:
+                    if not os.path.exists(zarr_path):  # Check if the file exists
+                        raise FileNotFoundError(f"Zarr file not found: {zarr_path}")
+
+                    dataset_name = os.path.basename(zarr_path)  # Extract dataset name from path
+                    print(f"Loading dataset: {dataset_name} (Attempt {retries + 1}/{max_retries})...")
+                    dataset = sd.read_zarr(zarr_path)  # Load the SpatialData object
+
+                    with lock:  # Ensure thread-safe updates to `self.datasets`
+                        self.datasets[dataset_name] = dataset
+                    print(f"Dataset '{dataset_name}' loaded successfully.")
+                    return  # Exit the loop if loading succeeds
+
+                except Exception as e:
+                    retries += 1
+                    print(f"Failed to load dataset '{zarr_path}' on attempt {retries}/{max_retries}: {e}")
+
+            # If all retries fail, log the final error
+            raise Exception(f"Dataset '{zarr_path}' failed to load after {max_retries} retries.")
+
+        lock = Lock()  # Initialize a thread lock for safe access to shared resources
+        errors = []  # List to track errors during dataset loading
+
         with ThreadPoolExecutor() as executor:
-            # Submit all dataset loading tasks to a thread pool for parallel processing
+            # Submit tasks to load datasets concurrently
             futures = {executor.submit(load_single_dataset, path): path for path in self.zarr_paths}
             for future in tqdm(concurrent.futures.as_completed(futures), total=len(self.zarr_paths), desc="Loading Datasets"):
                 try:
-                    future.result()  # Wait for the task to complete
+                    future.result()  # Wait for each task to complete
                 except Exception as e:
-                    errors.append((futures[future], e))  # Record errors
+                    errors.append((futures[future], e))  # Record errors for failed tasks
 
-        if errors:  # Log errors for failed datasets
-            print("Some datasets failed to load:")
+        # Log a summary of errors if any datasets failed to load
+        if errors:
+            print("\nSummary of Errors:")
             for path, error in errors:
                 print(f" - {path}: {error}")
 
-    def validate_data(self, required_images: Optional[List[str]] = None, required_tables: Optional[List[str]] = None) -> None:
+    def validate_data(self, required_images: Optional[List[str]] = None, required_tables: Optional[List[str]] = None,
+                      strict: bool = True) -> None:
         """
         Validate the presence of required images and tables in all loaded datasets.
 
         Args:
             required_images (Optional[List[str]]): A list of required image keys.
             required_tables (Optional[List[str]]): A list of required table keys.
+            strict (bool): Whether to raise a ValueError for missing components (default: True).
 
         Raises:
-            ValueError: If a required component (image/table) is missing in any dataset.
+            ValueError: If a required component (image/table) is missing in any dataset and `strict` is True.
         """
-        # Validate all loaded datasets for the required components
-        required_images = required_images or ["HE_original", "HE_nuc_original"]  # Default image keys
-        required_tables = required_tables or ["anucleus"]  # Default table keys
+        # Use default keys if none are provided
+        required_images = required_images or ["HE_original", "HE_nuc_original"]
+        required_tables = required_tables or ["anucleus"]
 
+        # Iterate over all loaded datasets
         for dataset_name, dataset in tqdm(self.datasets.items(), desc="Validating Datasets"):
             # Iterate over each loaded dataset
             print(f"Validating dataset: {dataset_name}...")  # Log validation start
-            missing_components: List[str] = []  # List of missing components
+            missing_components: List[str] = []  # Collect missing components
 
-            for key in required_images:  # Check required images
-                if key not in dataset.images.keys():  # Add missing image keys to the list
+            # Check for missing images
+            for key in required_images:
+                if key not in dataset.images.keys():
                     missing_components.append(f"Image '{key}'")
 
-            for key in required_tables:  # Check required tables
-                if key not in dataset.tables.keys():  # Add missing table keys to the list
+            # Check for missing tables
+            for key in required_tables:
+                if key not in dataset.tables.keys():
                     missing_components.append(f"Table '{key}'")
 
-            if missing_components:  # Log missing components
-                print(f"Dataset '{dataset_name}' is missing the following components:")
-                for component in missing_components:
-                    print(f" - {component}")
+            # Handle missing components
+            if missing_components:
+                error_message = (
+                        f"Dataset '{dataset_name}' is missing the following components:\n" +
+                        "\n".join(f" - {component}" for component in missing_components)
+                )
+                print(error_message)  # Log missing components
+
+                if strict:
+                    raise ValueError(error_message)  # Raise an error if strict mode is enabled
             else:
-                print(f"Dataset '{dataset_name}' is fully validated.")  # Log validation success
+                print(f"Dataset '{dataset_name}' is fully validated.")  # Log success
 
     def subsample_data(self, max_cells: int = 1000) -> None:
         """
@@ -140,72 +175,112 @@ class SpatialDataHandler:
         """
         # Subsample all loaded datasets to limit the number of cells
         for dataset_name, dataset in tqdm(self.datasets.items(), desc="Subsampling Datasets"):
-            # Iterate over each dataset for subsampling
-            anucleus = dataset.tables.get("anucleus")  # Access the anucleus table
+            # Access the anucleus table
+            anucleus = dataset.tables.get("anucleus")
             if anucleus is None:  # Skip if the table is missing
                 print(f"Dataset '{dataset_name}' does not contain an 'anucleus' table. Skipping subsampling.")
                 continue
 
+            # Ensure `shape` is valid and accessible
+            if not hasattr(anucleus, "shape") or not isinstance(anucleus.shape, tuple):
+                raise TypeError(f"Table 'anucleus' in dataset '{dataset_name}' does not have a valid shape attribute.")
+
             total_cells = anucleus.shape[0]  # Get the total number of cells
             if total_cells > max_cells:  # Check if subsampling is required
                 print(f"Subsampling {total_cells} cells to {max_cells} in dataset '{dataset_name}'...")
-                subsample_indices = np.random.choice(anucleus.obs_names, max_cells, replace=False)  # Select random cells
-                self.datasets[dataset_name].tables["anucleus"] = anucleus[subsample_indices, :]  # Update the table
-                print(f"Subsampled dataset '{dataset_name}' to {max_cells} cells.")  # Log success
+                subsample_indices = np.random.choice(anucleus.obs_names, max_cells, replace=False)
+                # Update the table with the subsampled data
+                self.datasets[dataset_name].tables["anucleus"] = anucleus[subsample_indices, :]
+                print(f"Subsampled dataset '{dataset_name}' to {max_cells} cells.")
             else:
-                print(f"No subsampling needed for dataset '{dataset_name}'.")  # Log if no subsampling is required
+                print(f"No subsampling needed for dataset '{dataset_name}'.")
 
-    def extract_nuclei_and_gene_expression(self, gene_subset: Optional[List[str]] = None, nuclei_subset: Optional[List[str]] = None,) -> Dict[str, pd.DataFrame]:
+    def extract_nuclei_and_gene_expression(self, gene_subset: Optional[List[str]] = None, nuclei_subset: Optional[List[str]] = None, batch_size: int = 1000) -> Dict[str, pd.DataFrame]:
         """
         Extract nuclei coordinates and link them to their gene expression data.
 
         Args:
             gene_subset (Optional[List[str]]): A subset of genes to extract.
             nuclei_subset (Optional[List[str]]): A subset of nuclei to include.
+            batch_size (int): The number of genes to process in each batch for efficiency.
 
         Returns:
             Dict[str, pd.DataFrame]: A dictionary mapping dataset names to their corresponding dataframes.
-        """
-        # Extract nuclei coordinates and link them to gene expression data for all datasets
-        results: Dict[str, pd.DataFrame] = {}  # Initialize results dictionary
 
+            Raises:
+                ValueError: If required components are missing or misaligned.
+        """
+        # Initialize results dictionary to store processed data for each dataset
+        results: Dict[str, pd.DataFrame] = {}
+
+        # Iterate over all datasets loaded into the handler
         for dataset_name, dataset in tqdm(self.datasets.items(), desc="Extracting Data"):
-            # Iterate over each dataset for data extraction
-            anucleus = dataset.tables.get("anucleus")  # Get the anucleus table
-            if anucleus is None:  # Skip if the table is missing
+            # Retrieve the anucleus table for nuclei and gene data
+            anucleus = dataset.tables.get("anucleus")
+            if anucleus is None:  # Skip dataset if anucleus table is missing
                 print(f"Dataset '{dataset_name}' does not contain an 'anucleus' table. Skipping extraction.")
                 continue
 
-            nuclei_coords = anucleus.obsm["spatial"]  # Extract spatial coordinates
-            nuclei_ids = anucleus.obs_names  # Extract nuclei IDs
-            gene_expression = anucleus.X  # Extract gene expression data
-            gene_names = anucleus.var_names  # Extract gene names
+            # Extract spatial coordinates of nuclei
+            nuclei_coords = anucleus.obsm.get("spatial")
+            # Extract nuclei IDs and gene expression matrix
+            nuclei_ids = anucleus.obs_names
+            gene_expression = anucleus.X
+            # Extract gene names associated with the expression matrix
+            gene_names = anucleus.var_names
 
-            # Apply nuclei and gene subsetting if specified
+            # Perform integrity checks to ensure data alignment and presence
+            if nuclei_coords is None or gene_expression is None:
+                raise ValueError(f"Dataset '{dataset_name}' is missing required spatial or expression data.")
+            if len(nuclei_ids) != gene_expression.shape[0]:
+                raise ValueError(f"Dataset '{dataset_name}' has mismatched nuclei IDs and gene expression rows.")
+            if len(gene_names) != gene_expression.shape[1]:
+                raise ValueError(f"Dataset '{dataset_name}' has mismatched gene names and expression columns.")
+
+            # Apply nuclei subset filter if provided
             if nuclei_subset:
                 nuclei_mask = np.isin(nuclei_ids, nuclei_subset)
                 nuclei_coords = nuclei_coords[nuclei_mask]
                 nuclei_ids = nuclei_ids[nuclei_mask]
 
+            # Apply gene subset filter if provided
             if gene_subset:
                 gene_mask = np.isin(gene_names, gene_subset)
                 gene_expression = gene_expression[:, gene_mask]
                 gene_names = gene_names[gene_mask]
 
-            # Create a DataFrame for the dataset
+            # Calculate the number of batches to process genes efficiently
+            num_genes = gene_expression.shape[1]
+            num_batches = (num_genes + batch_size - 1) // batch_size
+
+            # Initialize data dictionary to build the result DataFrame
             data: Dict[str, List] = {
                 "nuclei_id": nuclei_ids,
                 "x_coord": nuclei_coords[:, 0],
                 "y_coord": nuclei_coords[:, 1],
             }
 
-            for i, gene in tqdm(enumerate(gene_names), desc=f"Processing Genes in {dataset_name}", total=len(gene_names)):
-                # Populate the DataFrame with gene expression data
-                data[gene] = gene_expression[:, i]
+            # Process genes in batches to handle large datasets efficiently
+            for batch_idx in range(num_batches):
+                start = batch_idx * batch_size  # Start index for the current batch
+                end = min(start + batch_size, num_genes)  # End index for the current batch
+                batch_gene_names = gene_names[start:end]  # Get names of genes in the current batch
+                batch_expression = gene_expression[:, start:end]  # Get expression values for the batch
 
-            results[dataset_name] = pd.DataFrame(data)  # Add results to the dictionary
-            print(f"Extraction complete for dataset '{dataset_name}'.")  # Log success
+                # Add each gene's expression data to the dictionary
+                for i, gene in tqdm(
+                        enumerate(batch_gene_names),
+                        desc=f"Processing Batch {batch_idx + 1}/{num_batches} in {dataset_name}",
+                        total=len(batch_gene_names),
+                ):
+                    data[gene] = batch_expression[:, i]
 
+            # Create a DataFrame from the processed data and add it to the results dictionary
+            results[dataset_name] = pd.DataFrame(data)
+            # Log completion for the dataset
+            print(f"Extraction complete for dataset '{dataset_name}'.")
+
+        # Return the processed results for all datasets
         return results
 
     def get_image(self, dataset_name: str, key: str) -> np.ndarray:

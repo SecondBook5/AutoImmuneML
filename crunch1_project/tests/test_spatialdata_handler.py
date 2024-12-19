@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 from spatialdata import SpatialData  # Mocked spatialdata for testing
 from crunch1_project.src.spatialdata_handler import SpatialDataHandler
-from unittest import mock
 from unittest.mock import MagicMock, patch
 
 # Fixtures for setup and teardown
@@ -21,7 +20,7 @@ def mock_zarr_paths(tmp_path):
 
 @pytest.fixture
 def handler(mock_zarr_paths):
-    """Fixture to initialize the SpatialDataHandler."""
+    """Fixture to initialize a fresh SpatialDataHandler for each test."""
     return SpatialDataHandler(mock_zarr_paths)
 
 # Mock helper for creating fake SpatialData objects
@@ -68,51 +67,42 @@ def test_validate_data_missing_component(handler):
     """Test validation failure due to missing components."""
     mock_data = create_mock_spatialdata()
 
-    # Ensure mock_data includes required components initially
-    mock_data.images["HE_nuc_original"] = mock.MagicMock()
-    mock_data.tables["anucleus"] = mock.MagicMock()
+    # Simulate missing components
+    mock_data.images.pop("HE_nuc_original", None)
+    mock_data.tables.pop("anucleus", None)
 
-    # Simulate missing components by deleting keys
-    del mock_data.images["HE_nuc_original"]
-    del mock_data.tables["anucleus"]
-
-    # Patch the `spatialdata.read_zarr` function to return the mock dataset
+    # Patch `read_zarr` to return the mock dataset
     with patch("spatialdata.read_zarr", side_effect=lambda x: mock_data):
         handler.load_data()
-        # Adjust match to include a part of the actual error message
-        with pytest.raises(ValueError, match="Dataset 'dataset_1.zarr' is missing the following components"):
+        with pytest.raises(ValueError, match="Dataset .* is missing the following components"):
             handler.validate_data()
 
+# Test cases for `subsample_data`
 def test_subsample_data(handler):
     """Test successful subsampling of datasets."""
     mock_data = create_mock_spatialdata()
 
-    # Mock the `anucleus` table with a proper shape and obs_names attribute
-    mock_table = mock.MagicMock()
-    mock_table.shape = (1000, 460)  # Mock shape as a tuple
-    mock_table.obs_names = [f"cell_{i}" for i in range(1000)]  # Mock obs_names
+    # Mock table with proper slicing behavior
+    mock_table = MagicMock()
+    mock_table.shape = (1000, 460)
+    mock_table.obs_names = np.array([f"cell_{i}" for i in range(1000)])
 
-    # Define behavior for slicing
+    # Define slicing behavior
     def mock_getitem(key):
-        # Update the shape attribute to reflect subsampling
-        subsample_size = len(key) if isinstance(key, list) else 10  # Assume key reflects subsample size
-        mock_table.shape = (subsample_size, 460)  # Update the shape attribute
+        subsample_size = len(key) if isinstance(key, (list, np.ndarray)) else 10
+        mock_table.shape = (subsample_size, 460)
         return mock_table
 
-    mock_table.__getitem__.side_effect = mock_getitem  # Support slicing for subsampling
-
-    # Add the mock table to the dataset
+    mock_table.__getitem__.side_effect = mock_getitem
     mock_data.tables["anucleus"] = mock_table
 
-    # Patch the `spatialdata.read_zarr` function to return the mock dataset
+    # Patch `read_zarr` to use the mock dataset
     with patch("spatialdata.read_zarr", side_effect=lambda x: mock_data):
         handler.load_data()
-        handler.subsample_data(max_cells=10)  # Subsample to a smaller dataset
+        handler.subsample_data(max_cells=10)
 
-        # Verify the subsampling result
         for dataset in handler.datasets.values():
-            assert dataset.tables["anucleus"].shape[0] <= 10  # Ensure subsampling works
-
+            assert dataset.tables["anucleus"].shape[0] == 10
 
 # Test cases for `extract_nuclei_and_gene_expression`
 def test_extract_nuclei_and_gene_expression(handler):

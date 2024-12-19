@@ -39,6 +39,7 @@ cloudpickle==3.1.0       # Serialization of Python objects
 pydantic==2.10.3         # Data validation and settings management
 crunch-cli==5.7.3        # CrunchDAO CLI tool for data competitions
 h5py==3.12.1             # HDF5 format reader/writer
+pytest                   # Testing framework
 
 # Distributed and Parallel Computing
 dask==2024.12.0          # Parallel and distributed computing
