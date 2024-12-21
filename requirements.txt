@@ -25,6 +25,7 @@ imageio==2.36.1          # Reading/writing images
 imagecodecs==2024.6.1    # Image compression/decompression codecs
 ome-zarr==0.9.0          # Zarr format for microscopy data
 zarr==2.18.3             # Hierarchical storage for large datasets
+tifffile                 # TIFF file reading/writing
 
 # Visualization
 matplotlib==3.9.3        # Visualization library

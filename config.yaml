@@ -1,0 +1,89 @@
+# Autoimmune Disease Machine Learning Challenge Configuration File
+# Unified configuration for Crunches 1, 2, and 3
+# Organizes shared global settings and Crunch-specific parameters
+
+# Global settings shared across all Crunches
+global:
+  token_file: "/home/secondbook5/projects/AutoImmuneML/.crunchdao/token"  # Crunch token file location (shared)
+  base_dir: "/mnt/d/AutoImmuneML"                                        # Shared base directory for all Crunches
+  src_dir: "/home/secondbook5/projects/AutoImmuneML/src"                 # Reusable Python scripts directory (shared)
+  models_dir: "/mnt/d/AutoImmuneML/models"                               # Shared directory for trained models
+  logs_dir: "/mnt/d/AutoImmuneML/logs"                                   # Logs and debugging information (shared)
+  results_dir: "/mnt/d/AutoImmuneML/results"                             # Shared directory for final outputs and results
+
+# Crunch-specific settings
+crunches:
+  crunch1:
+    name: "autoimmune-crunch1"                                           # Project name for Crunch 1
+    crunch_type: "broad-1"                                               # Crunch type for CLI
+    dataset_size: "default"                                              # Options: "default" (small) or "large"
+
+    paths:
+      raw_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/data"     # Original downloaded data for Crunch 1
+      interim_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/interim"  # Intermediate processing outputs
+      train_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/train"  # Train-ready processed data
+      test_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/test"    # Test-ready processed data
+      predictions_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/predictions"  # Final predictions for submission
+      resources_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/resources"  # Pre-trained models or additional resources
+
+    training:
+      batch_size: 128                     # Batch size for training
+      num_workers: 4                      # Number of workers for parallel data loading
+      target_patch_size: 32               # Size of patches extracted from images during preprocessing
+      seed: 42                            # Random seed for reproducibility
+      n_folds: 2                          # Number of folds for cross-validation
+      regression_alpha: 1.0               # Regularization strength for Ridge Regression
+      normalize: false                    # Whether to normalize gene expression data
+
+    preprocessing:
+      sample_size: 10000                  # Number of cells to sample for training (None for full dataset)
+
+  crunch2:
+    name: "autoimmune-crunch2"                                           # Project name for Crunch 2
+    crunch_type: "broad-2"                                               # Crunch type for CLI
+    dataset_size: "large"                                                # Options: "default" or "large"
+
+    paths:
+      raw_dir: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/data"     # Original downloaded data for Crunch 2
+      interim_dir: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/interim"  # Intermediate processing outputs
+      train_dir: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/train"  # Train-ready processed data
+      test_dir: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/test"    # Test-ready processed data
+      predictions_dir: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/predictions"  # Final predictions for submission
+      scRNA_seq_file: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/scRNAseq.h5ad"  # Single-cell RNA-seq data for Crunch 2
+
+    training:
+      batch_size: 64                      # Batch size for training (lower due to larger dataset)
+      num_workers: 8                      # Number of workers for parallel data loading
+      target_patch_size: 64               # Larger patch size for training
+      seed: 42                            # Random seed for reproducibility
+      n_folds: 3                          # Number of folds for cross-validation
+      regression_alpha: 0.5               # Regularization strength for Ridge Regression
+      normalize: true                     # Normalize gene expression data during training
+
+    preprocessing:
+      sample_size: None                   # Use the full dataset for training in Crunch 2
+
+  crunch3:
+    name: "autoimmune-crunch3"                                           # Project name for Crunch 3
+    crunch_type: "broad-3"                                               # Crunch type for CLI
+    dataset_size: "default"                                              # Options: "default" (small) or "large"
+
+    paths:
+      raw_dir: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/data"     # Original downloaded data for Crunch 3
+      interim_dir: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/interim"  # Intermediate processing outputs
+      train_dir: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/train"  # Train-ready processed data
+      test_dir: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/test"    # Test-ready processed data
+      predictions_dir: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/predictions"  # Final predictions for submission
+      dysplasia_annotations: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/dysplasia_annotations.tiff"  # Dysplasia annotation file
+
+    training:
+      batch_size: 128                     # Batch size for training
+      num_workers: 4                      # Number of workers for parallel data loading
+      target_patch_size: 32               # Size of patches extracted from images during preprocessing
+      seed: 42                            # Random seed for reproducibility
+      n_folds: 5                          # Number of folds for cross-validation
+      regression_alpha: 1.0               # Regularization strength for Ridge Regression
+      normalize: true                     # Normalize gene expression data during training
+
+    preprocessing:
+      sample_size: 15000                  # Number of cells to sample for training
