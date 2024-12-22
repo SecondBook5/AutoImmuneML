@@ -1,29 +1,25 @@
+# File: path_validator.py
 import os
 import yaml
 from typing import Dict
+from utils.path_utils import resolve_path, get_global_variables, merge_variables
 
 
 def load_config() -> Dict:
     """
     Load the configuration from the config.yaml file.
-    
+
     Returns:
         dict: Parsed YAML configuration as a dictionary.
-    
+
     Raises:
         FileNotFoundError: If the config.yaml file does not exist.
         ValueError: If the YAML file is invalid or cannot be parsed.
     """
     try:
-        # Build the path to config.yaml
-        config_path = os.path.join(
-            os.path.dirname(__file__), "..", "config.yaml")
-        # Verify that the config file exists
+        config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
         if not os.path.exists(config_path):
-            raise FileNotFoundError(
-                f"Configuration file not found at: {config_path}")
-
-        # Open and parse the YAML file
+            raise FileNotFoundError(f"Configuration file not found at: {config_path}")
         with open(config_path, "r") as file:
             return yaml.safe_load(file)
     except FileNotFoundError as e:
@@ -34,32 +30,29 @@ def load_config() -> Dict:
         raise RuntimeError(f"Unexpected error while loading config.yaml: {e}")
 
 
-def check_directory(path: str, description: str):
+def ensure_directory_or_file(path: str):
     """
-    Check if a directory or file exists and print its status.
+    Ensure that a path is valid. If it is a file, validate it exists.
+    If it is a directory, create it if necessary.
 
     Args:
-        path (str): Path to verify.
-        description (str): A human-readable description of the directory/file.
-    
-    Returns:
-        bool: True if the path exists, False otherwise.
+        path (str): Path to check or create.
+
+    Raises:
+        RuntimeError: If the path cannot be created or validated.
     """
     try:
-        # Defensive check for invalid path inputs
-        if not isinstance(path, str) or not path.strip():
-            raise ValueError(f"Invalid path provided for '{description}'.")
-
-        # Verify if the path exists
         if os.path.exists(path):
-            print(f"[✔] {description}: Path exists -> {path}")
-            return True
+            if os.path.isfile(path):
+                print(f"[✔] File exists: {path}")
+            elif os.path.isdir(path):
+                print(f"[✔] Directory exists: {path}")
         else:
-            print(f"[✘] {description}: Path does NOT exist -> {path}")
-            return False
+            print(f"[✘] Path does NOT exist: {path}. Attempting to create it.")
+            os.makedirs(path, exist_ok=True)
+            print(f"[✔] Directory created: {path}")
     except Exception as e:
-        print(f"Error checking path '{description}': {e}")
-        return False
+        raise RuntimeError(f"Error ensuring path '{path}': {e}")
 
 
 def validate_paths(config: Dict):
@@ -72,27 +65,33 @@ def validate_paths(config: Dict):
     print("\n--- Validating Project Directories ---\n")
 
     try:
-        # Retrieve paths from the configuration file
-        paths_to_check = {
-            "Raw Data Directory": config["paths"].get("raw_dir"),
-            "Interim Data Directory": config["paths"].get("interim_dir"),
-            "Train Data Directory": config["paths"].get("train_dir"),
-            "Test Data Directory": config["paths"].get("test_dir"),
-            "Predictions Directory": config["paths"].get("predictions_dir"),
-            "CrunchDAO Token File": config["paths"].get("token_file"),
-            "Models Directory": config["paths"].get("models_dir"),
-            "Results Directory": config["paths"].get("results_dir"),
-            "Source Code Directory": config["paths"].get("src_dir"),
-            "Logs Directory": config["paths"].get("logs_dir")
-        }
+        # Extract global variables
+        global_vars = get_global_variables(config)
+        crunches = config.get("crunches", {})
 
-        # Loop through each path and validate
-        for description, path in paths_to_check.items():
-            # Defensive check for missing keys in the config file
-            if path is None:
-                print(f"[✘] {description}: Path is missing in config.yaml")
-                continue
-            check_directory(path, description)
+        # Validate global paths
+        for description, path in config["global"].items():
+            if description.endswith("_dir") or description == "token_file":
+                resolved_path = resolve_path(path, global_vars)
+                print(f"[DEBUG] Resolving global path for '{description}': {resolved_path}")
+                ensure_directory_or_file(resolved_path)
+
+        # Validate paths for each Crunch
+        for crunch_name, crunch_config in crunches.items():
+            print(f"\n--- Validating Paths for {crunch_name} ---")
+
+            # Merge global and crunch-specific variables
+            crunch_vars = {
+                key: resolve_path(value, global_vars)
+                for key, value in crunch_config["paths"].items()
+            }
+            all_vars = merge_variables(global_vars, crunch_vars)
+
+            # Resolve each path dynamically and validate
+            for description, path in crunch_config["paths"].items():
+                resolved_path = resolve_path(path, all_vars)
+                print(f"[DEBUG] Resolving path for '{description}' in {crunch_name}: {resolved_path}")
+                ensure_directory_or_file(resolved_path)
 
     except KeyError as e:
         print(f"Missing key in configuration file: {e}")
@@ -107,9 +106,7 @@ if __name__ == "__main__":
     Main script execution: Load the configuration file and validate all paths.
     """
     try:
-        # Load the configuration file
         config = load_config()
-        # Validate paths based on the configuration
         validate_paths(config)
     except FileNotFoundError as e:
         print(f"Error: {e}")
