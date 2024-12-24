@@ -6,7 +6,7 @@ import os
 import json
 import subprocess
 import time
-from typing import Dict, Optional
+from typing import Dict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Define the path to the manifest file
