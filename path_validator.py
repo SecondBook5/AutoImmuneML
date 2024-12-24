@@ -1,23 +1,30 @@
 # File: path_validator.py
+# This script validates and ensures the directory structure and required files defined in the configuration file.
+
 import os
 import yaml
 from typing import Dict
-from utils.path_utils import resolve_path, get_global_variables, merge_variables
 
 
-def load_config() -> Dict:
+def load_config(config_path: str) -> Dict:
     """
-    Load the configuration from the config.yaml file.
+    Load the configuration from the YAML file.
+
+    Args:
+        config_path (str): Path to the YAML configuration file.
 
     Returns:
-        dict: Parsed YAML configuration as a dictionary.
+        Dict: Parsed YAML configuration as a dictionary.
 
     Raises:
-        FileNotFoundError: If the config.yaml file does not exist.
+        FileNotFoundError: If the configuration file does not exist.
         ValueError: If the YAML file is invalid or cannot be parsed.
+
+    How It Works:
+        - Opens and parses the YAML file into a Python dictionary.
+        - Ensures the file exists before attempting to load it.
     """
     try:
-        config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"Configuration file not found at: {config_path}")
         with open(config_path, "r") as file:
@@ -30,75 +37,70 @@ def load_config() -> Dict:
         raise RuntimeError(f"Unexpected error while loading config.yaml: {e}")
 
 
-def ensure_directory_or_file(path: str):
+def ensure_path(path: str, is_file: bool = False) -> None:
     """
-    Ensure that a path is valid. If it is a file, validate it exists.
-    If it is a directory, create it if necessary.
+    Ensure a path is valid: check for files or create directories as needed.
 
     Args:
         path (str): Path to check or create.
+        is_file (bool): Whether the path is a file (default: False).
 
-    Raises:
-        RuntimeError: If the path cannot be created or validated.
+    How It Works:
+        - For files: Logs a warning if missing and moves to the next entry.
+        - For directories: Creates them if missing.
     """
     try:
         if os.path.exists(path):
-            if os.path.isfile(path):
-                print(f"[✔] File exists: {path}")
-            elif os.path.isdir(path):
-                print(f"[✔] Directory exists: {path}")
+            if is_file and not os.path.isfile(path):
+                print(f"[✘] Path exists but is not a file: {path}")
+            elif not is_file and not os.path.isdir(path):
+                print(f"[✘] Path exists but is not a directory: {path}")
+            else:
+                print(f"[✔] {'File' if is_file else 'Directory'} exists: {path}")
         else:
-            print(f"[✘] Path does NOT exist: {path}. Attempting to create it.")
-            os.makedirs(path, exist_ok=True)
-            print(f"[✔] Directory created: {path}")
+            if is_file:
+                print(f"[⚠] Required file missing: {path}. Skipping...")
+            else:
+                print(f"[✘] Directory does NOT exist: {path}. Attempting to create it.")
+                os.makedirs(path, exist_ok=True)
+                print(f"[✔] Directory created: {path}")
     except Exception as e:
-        raise RuntimeError(f"Error ensuring path '{path}': {e}")
+        print(f"[⚠] Error ensuring path '{path}': {e}. Continuing...")
 
 
 def validate_paths(config: Dict):
     """
-    Validate all key paths specified in the config.yaml file.
+    Validate and ensure all paths in the configuration file exist.
 
     Args:
-        config (dict): Parsed configuration dictionary.
+        config (Dict): Configuration dictionary with absolute paths.
+
+    How It Works:
+        - Iterates through global and Crunch-specific paths.
+        - Ensures files exist and directories are created if missing.
     """
-    print("\n--- Validating Project Directories ---\n")
+    print("\n--- Validating Project Directories and Files ---\n")
 
     try:
-        # Extract global variables
-        global_vars = get_global_variables(config)
-        crunches = config.get("crunches", {})
-
         # Validate global paths
-        for description, path in config["global"].items():
-            if description.endswith("_dir") or description == "token_file":
-                resolved_path = resolve_path(path, global_vars)
-                print(f"[DEBUG] Resolving global path for '{description}': {resolved_path}")
-                ensure_directory_or_file(resolved_path)
+        print("[INFO] Validating global paths...")
+        for key, path in config["global"].items():
+            is_file = key.endswith("_file")  # Determine if the path is a file
+            ensure_path(path, is_file=is_file)
 
-        # Validate paths for each Crunch
-        for crunch_name, crunch_config in crunches.items():
+        # Validate Crunch-specific paths
+        for crunch_name, crunch_config in config["crunches"].items():
             print(f"\n--- Validating Paths for {crunch_name} ---")
-
-            # Merge global and crunch-specific variables
-            crunch_vars = {
-                key: resolve_path(value, global_vars)
-                for key, value in crunch_config["paths"].items()
-            }
-            all_vars = merge_variables(global_vars, crunch_vars)
-
-            # Resolve each path dynamically and validate
-            for description, path in crunch_config["paths"].items():
-                resolved_path = resolve_path(path, all_vars)
-                print(f"[DEBUG] Resolving path for '{description}' in {crunch_name}: {resolved_path}")
-                ensure_directory_or_file(resolved_path)
+            for key, path in crunch_config["paths"].items():
+                is_file = key.endswith("_file")  # Determine if the path is a file
+                ensure_path(path, is_file=is_file)
 
     except KeyError as e:
-        print(f"Missing key in configuration file: {e}")
+        print(f"[⚠] Missing key in configuration file: {e}. Continuing...")
     except Exception as e:
-        print(f"An unexpected error occurred during path validation: {e}")
+        print(f"[⚠] An unexpected error occurred during path validation: {e}. Continuing...")
 
-    print("\n--- Directory Validation Complete ---\n")
+    print("\n--- Directory and File Validation Complete ---\n")
 
 
 if __name__ == "__main__":
@@ -106,8 +108,15 @@ if __name__ == "__main__":
     Main script execution: Load the configuration file and validate all paths.
     """
     try:
-        config = load_config()
+        # Define the path to the configuration file
+        config_file_path = "config.yaml"
+
+        # Load the configuration file
+        config = load_config(config_file_path)
+
+        # Validate paths based on the configuration
         validate_paths(config)
+
     except FileNotFoundError as e:
         print(f"Error: {e}")
     except ValueError as e:

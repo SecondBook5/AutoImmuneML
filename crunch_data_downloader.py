@@ -3,11 +3,14 @@
 
 # Import necessary libraries for file handling, YAML parsing, subprocess execution, and typing
 import os
-import yaml
+import json
 import subprocess
-from typing import Dict, Optional
 import time
+from typing import Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Define the path to the manifest file
+MANIFEST_FILE = "manifest.json"
 
 # Function to load the project configuration from a YAML file
 def load_config() -> Dict:
@@ -15,240 +18,279 @@ def load_config() -> Dict:
     Load the project configuration from config.yaml.
 
     Returns:
-        dict: The parsed configuration dictionary.
+        Dict: The parsed configuration dictionary.
 
     Raises:
         FileNotFoundError: If the config.yaml file does not exist.
         ValueError: If the YAML file has invalid syntax.
+        RuntimeError: For unexpected errors during loading.
     """
+    import yaml  # Import YAML library to handle YAML files
     try:
-        # Define the path to the configuration file relative to the current script
-        config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
+        # Define the path to the configuration file
+        config_path = "config.yaml"
 
-        # Check if the configuration file exists
+        # Check if the file exists
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
-        # Open and parse the configuration file
+        # Open and parse the YAML file
         with open(config_path, "r") as file:
             return yaml.safe_load(file)
 
     except yaml.YAMLError as e:
+        # Raise a ValueError for YAML parsing errors
         raise ValueError(f"Error parsing YAML file: {e}")
     except Exception as e:
+        # Raise a generic runtime error for unexpected issues
         raise RuntimeError(f"Unexpected error while loading config.yaml: {e}")
 
 # Function to validate the configuration structure
 def validate_config(config: Dict):
     """
-    Validate that the loaded configuration contains the required sections and keys.
+    Validate the structure of the configuration file.
 
     Args:
-        config (dict): The loaded configuration.
+        config (Dict): The configuration dictionary.
 
     Raises:
-        ValueError: If required sections or keys are missing.
+        ValueError: If the configuration is missing required keys or sections.
     """
+    # Define the required sections
     required_sections = ["global", "crunches"]
+
+    # Check if each required section exists in the config
     for section in required_sections:
         if section not in config:
-            raise ValueError(f"Missing required section in config.yaml: {section}")
+            raise ValueError(f"Missing required section: {section}")
 
+    # Check if the 'token_file' key exists in the global configuration
     if "token_file" not in config["global"]:
         raise ValueError("Missing 'token_file' in global configuration.")
 
 # Function to validate Crunch CLI installation
 def validate_crunch_cli():
     """
-    Validate that the Crunch CLI is installed and accessible.
+    Ensure that the Crunch CLI is installed and accessible.
 
     Raises:
-        RuntimeError: If the Crunch CLI is not found or not executable.
+        RuntimeError: If the CLI is not installed or is not functioning.
     """
     try:
+        # Run a test command to check if the Crunch CLI is installed
         subprocess.run(["crunch", "--help"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
     except FileNotFoundError:
+        # Raise an error if the Crunch CLI is not found
         raise RuntimeError("Crunch CLI is not installed or not in the system PATH.")
     except subprocess.CalledProcessError:
+        # Raise an error if the Crunch CLI command fails unexpectedly
         raise RuntimeError("Crunch CLI is installed but not functioning correctly.")
 
 # Function to retrieve the authentication token from a file
-def get_token(token_file: str, line_number: Optional[int] = None) -> str:
+def get_token(token_file: str, line_number: int) -> str:
     """
-    Retrieve the authentication token from a specified file.
+    Retrieve the CrunchDAO authentication token from a file.
 
     Args:
-        token_file (str): The path to the token file.
-        line_number (Optional[int]): The line number to read from the token file (1-based index).
+        token_file (str): Path to the token file.
+        line_number (int): Line number for token (1-based).
 
     Returns:
-        str: The token string used for authentication.
-
-    Raises:
-        FileNotFoundError: If the token file does not exist.
-        ValueError: If the token file is empty or the specified line is invalid.
+        str: The authentication token.
     """
-    try:
-        # Check if the token file exists
-        if not os.path.exists(token_file):
-            raise FileNotFoundError(f"Token file not found: {token_file}")
+    # Check if the token file exists
+    if not os.path.exists(token_file):
+        raise FileNotFoundError(f"Token file not found: {token_file}")
 
-        # Read the content of the token file
-        with open(token_file, "r") as file:
-            lines = file.readlines()
+    # Open the token file and read its lines
+    with open(token_file, "r") as file:
+        lines = file.readlines()
 
-            if line_number:
-                if line_number > len(lines):
-                    raise ValueError(f"Token file does not have line {line_number}.")
-                token = lines[line_number - 1].strip()
-            else:
-                token = lines[0].strip()
+        # Validate the requested line number
+        if line_number > len(lines):
+            raise ValueError(f"Token file does not have line {line_number}.")
 
-            if not token:
-                raise ValueError("Token file is empty or specified line is blank.")
-            return token
+        # Return the token at the specified line number
+        return lines[line_number - 1].strip()
 
-    except Exception as e:
-        raise RuntimeError(f"Error reading token file: {e}")
-
-# Function to validate the output directory
-def validate_output_directory(output_dir: str):
+# Function to load the manifest
+def load_manifest() -> Dict:
     """
-    Validate that the output directory exists and is writable.
+    Load the manifest file.
+
+    Returns:
+        Dict: Loaded manifest or an empty dictionary if not found.
+    """
+    # Check if the manifest file exists
+    if os.path.exists(MANIFEST_FILE):
+        # Load and return the manifest as a dictionary
+        with open(MANIFEST_FILE, "r") as file:
+            return json.load(file)
+    # Return an empty dictionary if the manifest does not exist
+    return {}
+
+# Function to save the manifest
+def save_manifest(manifest: Dict):
+    """
+    Save the manifest file.
 
     Args:
-        output_dir (str): Directory where the data will be saved.
-
-    Raises:
-        RuntimeError: If the directory is not writable or the filesystem is incompatible.
+        manifest (Dict): Manifest data to save.
     """
-    try:
-        # Ensure the target directory exists
-        os.makedirs(output_dir, exist_ok=True)
+    # Write the manifest dictionary to the manifest file as JSON
+    with open(MANIFEST_FILE, "w") as file:
+        json.dump(manifest, file, indent=4)
 
-        # Test write permissions by creating and deleting a temporary file
-        test_file = os.path.join(output_dir, "test_file.tmp")
-        with open(test_file, "w") as f:
-            f.write("test")
-        os.remove(test_file)
-
-    except PermissionError:
-        raise RuntimeError(f"Output directory is not writable: {output_dir}")
-    except Exception as e:
-        raise RuntimeError(f"Error validating output directory: {e}")
-
-# Function to download data using the Crunch CLI with retry logic
-def download_data(competition_name: str, project_name: str, dataset_size: str, token: str, output_dir: str, retries: int = 3):
+# Function to check if data for a crunch is already downloaded
+def is_data_downloaded(manifest: Dict, crunch_name: str) -> bool:
     """
-    Setup a workspace directory and download the dataset using the Crunch CLI.
+    Check if a crunch's data is already marked as downloaded.
 
     Args:
-        competition_name (str): The competition name (e.g., 'broad-1').
-        project_name (str): The CrunchDAO project name (e.g., 'autoimmune-crunch1').
-        dataset_size (str): Dataset size to download ('default' or 'large').
-        token (str): Authentication token for CrunchDAO.
-        output_dir (str): Directory where the workspace will be set up.
-        retries (int): Number of retry attempts for the command.
+        manifest (Dict): Manifest data.
+        crunch_name (str): Crunch name.
 
-    Raises:
-        RuntimeError: If the Crunch CLI command fails after retries.
+    Returns:
+        bool: True if downloaded, False otherwise.
     """
-    attempt = 0
-    while attempt < retries:
-        try:
-            # Validate the output directory before starting the download
-            validate_output_directory(output_dir)
+    # Return True if the crunch's status in the manifest is "downloaded"
+    return manifest.get(crunch_name, {}).get("status") == "downloaded"
 
-            # Construct the Crunch CLI command
-            command = [
-                "crunch", "setup",
-                competition_name, project_name,
-                output_dir,
-                "--token", token,
-                "--size", dataset_size
-            ]
-            print("Running command:", " ".join(command))
-
-            # Execute the command using subprocess
-            subprocess.run(command, check=True)
-            print("Workspace setup completed successfully.")
-            return  # Exit the function on success
-
-        except subprocess.CalledProcessError as e:
-            print(f"Error during workspace setup (attempt {attempt + 1}): {e}")
-            attempt += 1
-            time.sleep(2)  # Wait before retrying
-
-    raise RuntimeError(f"Crunch CLI failed after {retries} attempts.")
-
-# Function to handle parallel downloads within a single Crunch
-def process_crunch(name: str, config: Dict, token_file: str):
+# Function to download data using the Crunch CLI
+def download_data(competition_name: str, project_name: str, dataset_size: str, token: str, output_dir: str, dry_run: bool) -> bool:
     """
-    Process a single Crunch task with parallel retries.
+    Download data for a crunch using the Crunch CLI.
 
     Args:
-        name (str): The name of the Crunch (e.g., 'crunch1').
-        config (dict): The configuration for the Crunch.
-        token_file (str): The path to the token file.
+        competition_name (str): Competition name.
+        project_name (str): Project name.
+        dataset_size (str): Dataset size.
+        token (str): Authentication token.
+        output_dir (str): Output directory.
+        dry_run (bool): Whether to simulate the download.
+
+    Returns:
+        bool: True if download was successful, False otherwise.
     """
+    # Construct the Crunch CLI command
+    command = [
+        "crunch", "setup",
+        competition_name, project_name,
+        output_dir,
+        "--token", token,
+        "--size", dataset_size
+    ]
+
+    # Print the command for dry-run mode and return success
+    if dry_run:
+        print(f"[DRY-RUN] Would run command: {' '.join(command)}")
+        return True
+
     try:
-        print(f"Processing {name}...")
-        token = get_token(token_file, line_number=int(name[-1]))
+        # Execute the Crunch CLI command
+        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return True
+    except subprocess.CalledProcessError:
+        # Return False if the command fails
+        return False
 
-        # Simulate parallel retries (e.g., downloading sub-tasks within the same Crunch)
-        with ThreadPoolExecutor() as executor:
-            futures = [
-                executor.submit(download_data, config["crunch_type"], config["name"], config["dataset_size"], token, config["paths"]["raw_dir"], retries=1)
-                for _ in range(3)  # Simulating multiple parallel download attempts or sub-tasks
-            ]
-            for future in as_completed(futures):
-                future.result()
+# Function to process a single crunch
+def process_crunch(crunch_name: str, config: Dict, token: str, manifest: Dict, dry_run: bool):
+    """
+    Process and download data for a specific crunch.
 
-    except Exception as e:
-        print(f"Error processing {name}: {e}")
+    Args:
+        crunch_name (str): Crunch name.
+        config (Dict): Crunch-specific configuration.
+        token (str): Authentication token.
+        manifest (Dict): Manifest data.
+        dry_run (bool): Whether to simulate the download.
+    """
+    # Skip processing if the data is already downloaded
+    if is_data_downloaded(manifest, crunch_name):
+        print(f"[✔] {crunch_name} is already downloaded. Skipping.")
+        return
+
+    print(f"Processing {crunch_name}...")
+
+    # Define the download task
+    def download_task():
+        return download_data(
+            config["crunch_type"],
+            config["name"],
+            config["dataset_size"],
+            token,
+            config["paths"]["project_dir"],
+            dry_run
+        )
+
+    # Use a thread pool to handle parallel retries
+    with ThreadPoolExecutor() as inner_executor:
+        inner_futures = [inner_executor.submit(download_task) for _ in range(3)]
+        success = all(f.result() for f in as_completed(inner_futures))
+
+    # Update the manifest with the result of the download
+    manifest[crunch_name] = {
+        "status": "downloaded" if success else "failed",
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ")
+    }
+    # Save the manifest if not in dry-run mode
+    if not dry_run:
+        save_manifest(manifest)
 
 # Main script execution
 def main():
     """
-    Main script execution:
-    - Load the configuration from config.yaml.
-    - Validate the configuration structure.
-    - Check Crunch CLI availability.
-    - Retrieve the authentication token.
-    - Validate the output directory.
-    - Use Crunch CLI to download the specified dataset or all datasets in parallel.
+    Main script for managing downloads for CrunchDAO challenges.
     """
+    # Record the start time for runtime measurement
+    start_time = time.time()
+
+    # Prompt the user to enable dry-run mode
+    dry_run = input("Enable dry-run mode? (y/n): ").strip().lower() == "y"
     try:
-        # Step 1: Load and validate the configuration
+        # Load and validate the configuration
         config = load_config()
         validate_config(config)
 
-        # Step 2: Validate Crunch CLI installation
+        # Ensure the Crunch CLI is installed
         validate_crunch_cli()
 
-        # Step 3: Select the desired Crunch configuration or all
-        crunch_name = input("Enter the Crunch name (e.g., 'crunch1', 'crunch2', 'crunch3', or 'all'): ").strip()
+        # Load the manifest to track downloads
+        manifest = load_manifest()
+        token_file = config["global"]["token_file"]
 
-        global_config = config["global"]
-        crunches = config["crunches"]
-
-        if crunch_name == "all":
+        # Prompt the user to select a crunch or all
+        crunch_selection = input("Enter the Crunch name (e.g., 'crunch1', 'crunch2', 'crunch3', or 'all'): ").strip()
+        if crunch_selection == "all":
+            # Process all crunches in parallel
             with ThreadPoolExecutor() as outer_executor:
-                outer_futures = [
-                    outer_executor.submit(process_crunch, name, crunch_config, global_config["token_file"])
-                    for name, crunch_config in crunches.items()
+                futures = [
+                    outer_executor.submit(process_crunch, name, crunch_config, get_token(token_file, idx + 1), manifest, dry_run)
+                    for idx, (name, crunch_config) in enumerate(config["crunches"].items())
                 ]
-                for future in as_completed(outer_futures):
+                for future in as_completed(futures):
                     future.result()
-        elif crunch_name in crunches:
-            process_crunch(crunch_name, crunches[crunch_name], global_config["token_file"])
+        elif crunch_selection in config["crunches"]:
+            # Process a specific crunch
+            process_crunch(
+                crunch_selection,
+                config["crunches"][crunch_selection],
+                get_token(token_file, list(config["crunches"].keys()).index(crunch_selection) + 1),
+                manifest,
+                dry_run
+            )
         else:
-            raise ValueError(f"Invalid Crunch name: {crunch_name}")
+            print(f"Invalid selection: {crunch_selection}")
 
-    except (FileNotFoundError, ValueError, RuntimeError) as e:
-        print(f"Error: {e}")
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        # Print an error message if any exception occurs
+        print(f"An error occurred: {e}")
+    finally:
+        # Print the total runtime of the script
+        runtime = time.time() - start_time
+        print(f"Total runtime: {runtime:.2f} seconds")
 
+# Run the script
 if __name__ == "__main__":
     main()

@@ -1,111 +1,110 @@
 # File: utils/path_utils.py
-# This file contains utility functions for resolving and managing paths with placeholders in a configuration file.
-from typing import Dict
+# Utility functions for resolving, validating, and managing paths dynamically.
+
 import os
 import re
+from typing import Dict
 
 # Function to resolve placeholders in a path string with actual values from a dictionary
 def resolve_path(path: str, variables: Dict[str, str]) -> str:
     """
-    Resolve a path with placeholders using the provided variables.
+    Resolve placeholders in a path string using the provided variables.
 
     Args:
-        path (str): Path string with placeholders (e.g., {base_dir}).
-        variables (Dict[str, str]): Dictionary of variables to replace in the path.
+        path (str): Path string with placeholders (e.g., {base_dir}/data).
+        variables (Dict[str, str]): Dictionary of variables to replace placeholders.
 
     Returns:
         str: Resolved path with placeholders replaced by actual values.
 
     Raises:
-        ValueError: If path resolution fails due to missing or invalid variables.
+        ValueError: If unresolved placeholders remain in the path.
+
+    How It Works:
+        - Placeholders enclosed in curly braces (e.g., {base_dir}) are replaced
+          with corresponding values from the variables dictionary.
+        - If placeholders remain unresolved, a ValueError is raised.
     """
-    # Check if the path is None or empty and return it unchanged if so
+    # Return the path unchanged if it is None or empty
     if not path:
         return path
+
     try:
-        # Replace all placeholders in the path with corresponding values from the variables dictionary
+        # Replace each placeholder in the path with its corresponding value
         for key, value in variables.items():
             path = path.replace(f"{{{key}}}", value)
-        # Return the fully resolved path
+
+        # Extract unresolved placeholders, if any, and raise an error
+        unresolved = extract_placeholders(path)
+        if unresolved:
+            raise ValueError(f"Unresolved placeholders in path '{path}': {unresolved}")
+
+        # Return the resolved path
         return path
     except Exception as e:
         # Raise a ValueError if an error occurs during path resolution
         raise ValueError(f"Error resolving path '{path}': {e}")
 
-# Function to resolve placeholders with fallback to default values
-def resolve_path_with_defaults(path: str, variables: Dict[str, str], defaults: Dict[str, str] = None) -> str:
+def resolve_path_recursively(path: str, variables: Dict[str, str]) -> str:
     """
-    Resolve a path with placeholders using the provided variables and fallback defaults.
+    Resolve placeholders in a path string recursively using the provided variables.
 
     Args:
-        path (str): Path string with placeholders (e.g., {base_dir}).
-        variables (Dict[str, str]): Dictionary of variables to replace in the path.
-        defaults (Dict[str, str]): Dictionary of default values for placeholders.
+        path (str): Path string with placeholders (e.g., {base_dir}/data).
+        variables (Dict[str, str]): Dictionary of variables to replace placeholders.
 
     Returns:
-        str: Resolved path with placeholders replaced by actual values or defaults.
-    """
-    # Return the path unchanged if it is None or empty
-    if not path:
-        return path
-    # Initialize defaults if not provided
-    defaults = defaults or {}
-    try:
-        # Iterate through both variables and defaults to replace placeholders
-        for key in set(variables) | set(defaults):
-            value = variables.get(key, defaults.get(key, ""))
-            path = path.replace(f"{{{key}}}", value)
-        # Return the resolved path
-        return path
-    except Exception as e:
-        # Raise a ValueError if an error occurs during resolution
-        raise ValueError(f"Error resolving path '{path}' with defaults: {e}")
-
-# Function to validate that a resolved path contains no placeholders and is valid
-def validate_resolved_path(path: str) -> bool:
-    """
-    Validate that a resolved path contains no placeholders and is valid.
-
-    Args:
-        path (str): Resolved path to validate.
-
-    Returns:
-        bool: True if the path is valid, False otherwise.
+        str: Resolved path with placeholders replaced by actual values.
 
     Raises:
-        ValueError: If the path still contains unresolved placeholders.
-    """
-    # Check for unresolved placeholders in the path
-    if "{" in path or "}" in path:
-        raise ValueError(f"Path '{path}' contains unresolved placeholders.")
-    # Check if the directory portion of the path exists
-    if not os.path.exists(os.path.dirname(path)):
-        print(f"[✘] Directory does not exist for path: {path}")
-        return False
-    # Print success message and return True if path is valid
-    print(f"[✔] Path is valid: {path}")
-    return True
+        ValueError: If unresolved placeholders remain after recursive resolution.
 
-# Function to ensure a directory exists, creating it if necessary
-def ensure_directory_exists(path: str):
+    How It Works:
+        - Keeps resolving placeholders until none are left in the path.
+        - Uses `resolve_path` in a loop to handle nested placeholders.
     """
-    Ensure that a directory exists; create it if it does not.
+    # Keep resolving placeholders until none are left
+    while "{" in path and "}" in path:
+        path = resolve_path(path, variables)
+    return path
+
+def extract_placeholders(path: str) -> list:
+    """
+    Extract unresolved placeholders from a path string.
 
     Args:
-        path (str): Path to the directory to check or create.
+        path (str): Path string to analyze.
 
     Returns:
-        str: The absolute path of the ensured directory.
+        list: List of placeholders found in the path (e.g., ['base_dir']).
+
+    How It Works:
+        - Uses a regular expression to find all substrings enclosed in curly braces.
+        - Returns a list of placeholder names.
+    """
+    # Use regex to find all placeholders enclosed in curly braces
+    return re.findall(r"{(.*?)}", path)
+
+def ensure_directory_exists(path: str) -> None:
+    """
+    Ensure that a directory exists, creating it if necessary.
+
+    Args:
+        path (str): Path to the directory.
 
     Raises:
-        OSError: If the directory cannot be created.
+        RuntimeError: If the directory cannot be created.
+
+    How It Works:
+        - Checks if the directory exists.
+        - Creates the directory (and any missing parent directories) if it does not exist.
     """
     try:
         # Create the directory if it does not exist
         os.makedirs(path, exist_ok=True)
-        # Print success message and return the absolute path of the directory
-        print(f"[✔] Directory ensured: {path}")
-        return os.path.abspath(path)
+
+        # Print success message for debugging purposes
+        print(f"[\u2714] Directory ensured: {path}")
     except OSError as e:
         # Raise a RuntimeError if directory creation fails
         raise RuntimeError(f"Error ensuring directory '{path}': {e}")
@@ -120,38 +119,32 @@ def normalize_path(path: str) -> str:
 
     Returns:
         str: Normalized absolute path.
+
+    How It Works:
+        - Converts the path to an absolute path.
+        - Normalizes the path to remove redundant separators or up-level references.
     """
     # Normalize and return the absolute path
     return os.path.normpath(os.path.abspath(path))
 
-# Function to extract unresolved placeholders from a path
-def extract_placeholders(path: str) -> list:
-    """
-    Extract placeholders (e.g., {base_dir}) from a path.
-
-    Args:
-        path (str): Path string to analyze.
-
-    Returns:
-        list: List of placeholders found in the path.
-    """
-    # Use a regular expression to find all placeholders in the path
-    return re.findall(r"{(.*?)}", path)
-
-# Function to extract global variables from the configuration dictionary
 def get_global_variables(config: Dict) -> Dict[str, str]:
     """
-    Extract global variables from the configuration.
+    Extract global variables from the configuration dictionary.
 
     Args:
         config (Dict): Parsed configuration dictionary.
 
     Returns:
         Dict[str, str]: Dictionary of global variables for path resolution.
+
+    How It Works:
+        - Extracts the 'global' section from the configuration.
+        - Returns a dictionary containing base_dir and data_dir values.
     """
-    # Retrieve the global section from the configuration file
+    # Retrieve the global section from the configuration
     global_config = config.get("global", {})
-    # Return a dictionary containing only relevant global variables for path resolution
+
+    # Extract and return global variables relevant for path resolution
     return {
         "base_dir": global_config.get("base_dir", ""),
         "data_dir": global_config.get("data_dir", ""),
@@ -160,7 +153,7 @@ def get_global_variables(config: Dict) -> Dict[str, str]:
 # Function to merge global variables with Crunch-specific variables
 def merge_variables(global_vars: Dict[str, str], crunch_vars: Dict[str, str]) -> Dict[str, str]:
     """
-    Merge global and crunch-specific variables.
+    Merge global variables with Crunch-specific variables.
 
     Args:
         global_vars (Dict[str, str]): Global variables for path resolution.
@@ -168,6 +161,60 @@ def merge_variables(global_vars: Dict[str, str], crunch_vars: Dict[str, str]) ->
 
     Returns:
         Dict[str, str]: Merged dictionary of variables.
+
+    How It Works:
+        - Combines the global and Crunch-specific variables.
+        - Crunch-specific variables take precedence over global variables.
     """
-    # Merge the global and crunch-specific dictionaries, with Crunch-specific variables overriding global ones
-    return {**global_vars, **crunch_vars}
+    # Merge global and crunch-specific variables, prioritizing crunch-specific
+    merged = {**global_vars, **crunch_vars}
+
+    # Print debug information about the merged variables
+    print(f"[DEBUG] Merged Variables: {merged}")
+
+    # Return the merged dictionary
+    return merged
+
+def resolve_all_paths(config: Dict) -> Dict:
+    """
+    Resolve all paths in the configuration dynamically and recursively.
+
+    Args:
+        config (Dict): Parsed configuration dictionary with placeholders.
+
+    Returns:
+        Dict: Configuration with all paths resolved.
+
+    Raises:
+        ValueError: If placeholders remain unresolved after resolution.
+
+    How It Works:
+        - Resolves global paths using global variables.
+        - Resolves Crunch-specific paths by merging global and Crunch-specific variables.
+        - Ensures no unresolved placeholders remain in the final configuration.
+    """
+    # Extract global variables from the configuration
+    global_vars = get_global_variables(config)
+
+    # Create a copy of the configuration to resolve paths without modifying the original
+    resolved_config = config.copy()
+
+    # Resolve global paths recursively
+    for key, value in resolved_config["global"].items():
+        if isinstance(value, str):
+            resolved_config["global"][key] = resolve_path_recursively(value, global_vars)
+
+    # Resolve Crunch-specific paths recursively
+    for crunch_name, crunch_config in resolved_config["crunches"].items():
+        # Extract Crunch-specific variables
+        crunch_vars = {"project_dir": crunch_config["paths"].get("project_dir")}
+
+        # Merge global and Crunch-specific variables
+        all_vars = merge_variables(global_vars, crunch_vars)
+
+        # Resolve each path in the Crunch's paths dictionary recursively
+        for path_key, path_value in crunch_config["paths"].items():
+            resolved_config["crunches"][crunch_name]["paths"][path_key] = resolve_path_recursively(path_value, all_vars)
+
+    # Return the fully resolved configuration
+    return resolved_config

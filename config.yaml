@@ -5,11 +5,9 @@
 # Global settings shared across all Crunches
 global:
   token_file: "/home/secondbook5/projects/AutoImmuneML/.crunchdao/token"  # Crunch token file location (shared)
-  base_dir: "/mnt/d/AutoImmuneML"                                        # Shared base directory for all Crunches
+  base_dir: "/home/secondbook5/projects/AutoImmuneML"                    # Base directory for code and logs in WSL2
   src_dir: "/home/secondbook5/projects/AutoImmuneML/src"                 # Reusable Python scripts directory (shared)
-  models_dir: "/mnt/d/AutoImmuneML/models"                               # Shared directory for trained models
-  logs_dir: "/mnt/d/AutoImmuneML/logs"                                   # Logs and debugging information (shared)
-  results_dir: "/mnt/d/AutoImmuneML/results"                             # Shared directory for final outputs and results
+  data_dir: "/mnt/d/AutoImmuneML"                                        # Shared base directory for data storage
 
 # Crunch-specific settings
 crunches:
@@ -19,12 +17,16 @@ crunches:
     dataset_size: "default"                                              # Options: "default" (small) or "large"
 
     paths:
-      raw_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/data"     # Original downloaded data for Crunch 1
+      project_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1"      # Target directory for downloads
+      raw_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/data"     # Corrected path for downloaded data
       interim_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/interim"  # Intermediate processing outputs
       train_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/train"  # Train-ready processed data
       test_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/test"    # Test-ready processed data
-      predictions_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/predictions"  # Final predictions for submission
-      resources_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/resources"  # Pre-trained models or additional resources
+      predictions_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/predictions"  # Final predictions
+      resources_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1/resources"  # Resources folder for Crunch 1
+      models_dir: "/home/secondbook5/projects/AutoImmuneML/crunch1_project/models"  # Crunch-specific models directory
+      logs_dir: "/home/secondbook5/projects/AutoImmuneML/crunch1_project/logs"     # Crunch-specific logs directory
+      results_dir: "/home/secondbook5/projects/AutoImmuneML/crunch1_project/results"  # Crunch-specific results directory
 
     training:
       batch_size: 128                     # Batch size for training
@@ -44,12 +46,19 @@ crunches:
     dataset_size: "large"                                                # Options: "default" or "large"
 
     paths:
-      raw_dir: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/data"     # Original downloaded data for Crunch 2
+      project_dir: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2"      # Target directory for downloads
+      raw_dir: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/data"     # Corrected path for downloaded data
       interim_dir: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/interim"  # Intermediate processing outputs
       train_dir: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/train"  # Train-ready processed data
       test_dir: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/test"    # Test-ready processed data
-      predictions_dir: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/predictions"  # Final predictions for submission
-      scRNA_seq_file: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/scRNAseq.h5ad"  # Single-cell RNA-seq data for Crunch 2
+      predictions_dir: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/predictions"  # Final predictions
+      resources_dir: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/resources"  # Resources folder for Crunch 2
+      models_dir: "/home/secondbook5/projects/AutoImmuneML/crunch2_project/models"  # Crunch-specific models directory
+      logs_dir: "/home/secondbook5/projects/AutoImmuneML/crunch2_project/logs"     # Crunch-specific logs directory
+      results_dir: "/home/secondbook5/projects/AutoImmuneML/crunch2_project/results"  # Crunch-specific results directory
+      scRNA_seq_file: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/data/Crunch2_scRNAseq.h5ad"  # Single-cell RNA-seq data for Crunch 2
+      gene_list_file: "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2/data/Crunch2_gene_list.csv" # Gene list for Crunch 2
+
 
     training:
       batch_size: 64                      # Batch size for training (lower due to larger dataset)
@@ -69,12 +78,24 @@ crunches:
     dataset_size: "default"                                              # Options: "default" (small) or "large"
 
     paths:
-      raw_dir: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/data"     # Original downloaded data for Crunch 3
+      project_dir: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3"      # Target directory for downloads
+      raw_dir: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/data"     # Corrected path for downloaded data
       interim_dir: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/interim"  # Intermediate processing outputs
       train_dir: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/train"  # Train-ready processed data
       test_dir: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/test"    # Test-ready processed data
-      predictions_dir: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/predictions"  # Final predictions for submission
-      dysplasia_annotations: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/dysplasia_annotations.tiff"  # Dysplasia annotation file
+      predictions_dir: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/predictions"  # Final predictions
+      resources_dir: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/resources"  # Resources folder for Crunch 3
+      models_dir: "/home/secondbook5/projects/AutoImmuneML/crunch3_project/models"  # Crunch-specific models directory
+      logs_dir: "/home/secondbook5/projects/AutoImmuneML/crunch3_project/logs"     # Crunch-specific logs directory
+      results_dir: "/home/secondbook5/projects/AutoImmuneML/crunch3_project/results"  # Crunch-specific results directory
+      scRNA_seq_file: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/data/Crunch3_scRNAseq.h5ad"  # Single-cell RNA-seq data for Crunch 2
+      gene_list_file: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/data/Crunch3_gene_list.csv" # Gene list for Crunch 2
+      he_image_file: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/data/UC9_I-crunch3-HE.tif" # HE image file for Crunch 3
+      he_label_file: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/data/UC9_I-crunch3-HE-label-stardist.tif" # HE label file for Crunch 3
+      he_dysplasia_roi_file: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/data/UC9_I-crunch3-HE-dysplasia-ROI.tif" # HE dysplasia ROI file for Crunch 3
+
+
+
 
     training:
       batch_size: 128                     # Batch size for training
