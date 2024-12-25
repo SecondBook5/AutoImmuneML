@@ -31,6 +31,10 @@
         "data/UC9_I.zarr": {
             "status": "downloaded",
             "size_bytes": 1352747602
+        },
+        "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1": {
+            "status": "downloaded",
+            "size_bytes": 512
         }
     },
     "crunch2": {
@@ -73,6 +77,10 @@
         "data/UC9_I.zarr": {
             "status": "downloaded",
             "size_bytes": 9232066268
+        },
+        "/mnt/d/AutoImmuneML/broad-2-autoimmune-crunch2": {
+            "status": "downloaded",
+            "size_bytes": 512
         }
     },
     "crunch3": {
@@ -99,6 +107,10 @@
         "data/UC9_I.zarr": {
             "status": "downloaded",
             "size_bytes": 1352747602
+        },
+        "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3": {
+            "status": "downloaded",
+            "size_bytes": 512
         }
     }
 }

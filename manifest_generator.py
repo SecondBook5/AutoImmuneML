@@ -1,3 +1,4 @@
+# File: manifest_generator.py
 import os
 import json
 from typing import Dict, List

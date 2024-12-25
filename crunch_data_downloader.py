@@ -1,7 +1,6 @@
 # Autoimmune Disease Machine Learning Challenge Data Downloader
 # This script downloads and sets up the workspace for CrunchDAO challenges using the Crunch CLI.
 
-# Import necessary libraries for file handling, YAML parsing, subprocess execution, and typing
 import os
 import json
 import subprocess
@@ -25,7 +24,7 @@ def load_config() -> Dict:
         ValueError: If the YAML file has invalid syntax.
         RuntimeError: For unexpected errors during loading.
     """
-    import yaml  # Import YAML library to handle YAML files
+    import yaml
     try:
         # Define the path to the configuration file
         config_path = "config.yaml"
@@ -141,20 +140,43 @@ def save_manifest(manifest: Dict):
     with open(MANIFEST_FILE, "w") as file:
         json.dump(manifest, file, indent=4)
 
-# Function to check if data for a crunch is already downloaded
-def is_data_downloaded(manifest: Dict, crunch_name: str) -> bool:
+# Function to update the manifest
+def update_manifest(manifest: Dict, crunch_name: str, file_path: str, status: str, size: int = 0):
     """
-    Check if a crunch's data is already marked as downloaded.
+    Update the manifest with the status of a file.
 
     Args:
-        manifest (Dict): Manifest data.
-        crunch_name (str): Crunch name.
+        manifest (Dict): The current manifest data.
+        crunch_name (str): Name of the Crunch being updated.
+        file_path (str): Path of the file being updated.
+        status (str): Status of the file (e.g., "downloaded").
+        size (int): Size of the file in bytes.
+    """
+    # Initialize the crunch entry in the manifest if not already present
+    if crunch_name not in manifest:
+        manifest[crunch_name] = {}
+
+    # Update the file's entry in the manifest
+    manifest[crunch_name][file_path] = {
+        "status": status,
+        "size_bytes": size
+    }
+
+
+# Function to check if a file or directory is downloaded
+def is_downloaded(manifest: Dict, crunch_name: str, file_path: str) -> bool:
+    """
+    Check if a file or directory is already downloaded.
+
+    Args:
+        manifest (Dict): The current manifest data.
+        crunch_name (str): Name of the Crunch.
+        file_path (str): Path of the file to check.
 
     Returns:
-        bool: True if downloaded, False otherwise.
+        bool: True if the file is downloaded, False otherwise.
     """
-    # Return True if the crunch's status in the manifest is "downloaded"
-    return manifest.get(crunch_name, {}).get("status") == "downloaded"
+    return manifest.get(crunch_name, {}).get(file_path, {}).get("status") == "downloaded"
 
 # Function to download data using the Crunch CLI
 def download_data(competition_name: str, project_name: str, dataset_size: str, token: str, output_dir: str, dry_run: bool) -> bool:
@@ -190,8 +212,9 @@ def download_data(competition_name: str, project_name: str, dataset_size: str, t
         # Execute the Crunch CLI command
         subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return True
-    except subprocess.CalledProcessError:
-        # Return False if the command fails
+    except subprocess.CalledProcessError as e:
+        # Log the error on download failure
+        print(f"[✘] Download failed: {e}")
         return False
 
 # Function to process a single crunch
@@ -206,8 +229,11 @@ def process_crunch(crunch_name: str, config: Dict, token: str, manifest: Dict, d
         manifest (Dict): Manifest data.
         dry_run (bool): Whether to simulate the download.
     """
-    # Skip processing if the data is already downloaded
-    if is_data_downloaded(manifest, crunch_name):
+    # Get the project directory from the configuration
+    project_dir = config["paths"]["project_dir"]
+
+    # Check if the project directory is already downloaded
+    if is_downloaded(manifest, crunch_name, project_dir):
         print(f"[✔] {crunch_name} is already downloaded. Skipping.")
         return
 
@@ -220,23 +246,23 @@ def process_crunch(crunch_name: str, config: Dict, token: str, manifest: Dict, d
             config["name"],
             config["dataset_size"],
             token,
-            config["paths"]["project_dir"],
+            project_dir,
             dry_run
         )
 
-    # Use a thread pool to handle parallel retries
-    with ThreadPoolExecutor() as inner_executor:
-        inner_futures = [inner_executor.submit(download_task) for _ in range(3)]
-        success = all(f.result() for f in as_completed(inner_futures))
+    # Execute the download task in parallel retries
+    with ThreadPoolExecutor() as executor:
+        futures = [executor.submit(download_task) for _ in range(3)]
+        success = all(f.result() for f in as_completed(futures))
 
     # Update the manifest with the result of the download
-    manifest[crunch_name] = {
-        "status": "downloaded" if success else "failed",
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ")
-    }
-    # Save the manifest if not in dry-run mode
-    if not dry_run:
-        save_manifest(manifest)
+    if success:
+        size = os.path.getsize(project_dir) if os.path.exists(project_dir) else 0
+        update_manifest(manifest, crunch_name, project_dir, "downloaded", size)
+        print(f"[✔] {crunch_name} downloaded successfully and manifest updated.")
+    else:
+        print(f"[✘] Failed to download {crunch_name}.")
+
 
 # Main script execution
 def main():
@@ -264,9 +290,9 @@ def main():
         crunch_selection = input("Enter the Crunch name (e.g., 'crunch1', 'crunch2', 'crunch3', or 'all'): ").strip()
         if crunch_selection == "all":
             # Process all crunches in parallel
-            with ThreadPoolExecutor() as outer_executor:
+            with ThreadPoolExecutor() as executor:
                 futures = [
-                    outer_executor.submit(process_crunch, name, crunch_config, get_token(token_file, idx + 1), manifest, dry_run)
+                    executor.submit(process_crunch, name, crunch_config, get_token(token_file, idx + 1), manifest, dry_run)
                     for idx, (name, crunch_config) in enumerate(config["crunches"].items())
                 ]
                 for future in as_completed(futures):
@@ -283,13 +309,17 @@ def main():
         else:
             print(f"Invalid selection: {crunch_selection}")
 
+        # Save the manifest after processing
+        save_manifest(manifest)
+
     except Exception as e:
         # Print an error message if any exception occurs
-        print(f"An error occurred: {e}")
+        print(f"[ERROR] {e}")
     finally:
         # Print the total runtime of the script
         runtime = time.time() - start_time
         print(f"Total runtime: {runtime:.2f} seconds")
+
 
 # Run the script
 if __name__ == "__main__":
