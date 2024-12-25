@@ -9,7 +9,7 @@ from typing import Dict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Define the path to the manifest file
-MANIFEST_FILE = "manifest.json"
+MANIFEST_FILE = "../manifest.json"
 
 # Function to load the project configuration from a YAML file
 def load_config() -> Dict:
@@ -27,7 +27,7 @@ def load_config() -> Dict:
     import yaml
     try:
         # Define the path to the configuration file
-        config_path = "config.yaml"
+        config_path = "../config.yaml"
 
         # Check if the file exists
         if not os.path.exists(config_path):
