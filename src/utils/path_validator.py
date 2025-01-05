@@ -3,144 +3,142 @@
 
 import os  # For file and directory operations
 import yaml  # For parsing YAML configuration files
+import logging  # For structured logging
 from typing import Dict  # For more explicit type annotations
 
-
-def load_config(config_path: str) -> Dict:
+class PathValidator:
     """
-    Load the configuration from a YAML file.
-
-    Args:
-        config_path (str): Path to the YAML configuration file.
-
-    Returns:
-        Dict: Parsed YAML configuration as a dictionary.
-
-    Raises:
-        FileNotFoundError: If the configuration file does not exist.
-        ValueError: If the YAML file is invalid or cannot be parsed.
+    A utility class to validate and ensure the directory structure and required files
+    defined in the configuration file.
     """
-    try:
+
+    def __init__(self, config_path: str):
+        """
+        Initialize the PathValidator with the path to the configuration file.
+
+        Args:
+            config_path (str): Path to the YAML configuration file.
+        """
+        # Store the path to the configuration file
+        self.config_path = config_path
+        # Load the configuration file and parse its contents
+        self.config = self._load_config()
+        # Set up a logger for structured output
+        self.logger = self._setup_logger()
+
+    def _setup_logger(self) -> logging.Logger:
+        """
+        Setup a logger for structured output.
+
+        Returns:
+            logging.Logger: Configured logger instance.
+        """
+        # Create a logger instance
+        logger = logging.getLogger("PathValidator")
+        # Define a stream handler for logging to console
+        handler = logging.StreamHandler()
+        # Set the log format to include level and message
+        formatter = logging.Formatter("[%(levelname)s] %(message)s")
+        handler.setFormatter(formatter)
+        # Add the handler to the logger
+        logger.addHandler(handler)
+        # Set the default logging level to INFO
+        logger.setLevel(logging.INFO)
+        return logger
+
+    def _load_config(self) -> Dict:
+        """
+        Load the configuration from a YAML file.
+
+        Returns:
+            Dict: Parsed YAML configuration as a dictionary.
+
+        Raises:
+            FileNotFoundError: If the configuration file does not exist.
+            ValueError: If the YAML file is invalid or cannot be parsed.
+        """
         # Check if the configuration file exists
-        if not os.path.exists(config_path):
-            raise FileNotFoundError(f"Configuration file not found at: {config_path}")
+        if not os.path.exists(self.config_path):
+            raise FileNotFoundError(f"Configuration file not found at: {self.config_path}")
 
-        # Open and parse the YAML file into a dictionary
-        with open(config_path, "r") as file:
-            return yaml.safe_load(file)
+        try:
+            # Open the YAML file and parse its contents
+            with open(self.config_path, "r") as file:
+                return yaml.safe_load(file)
+        except yaml.YAMLError as e:
+            # Raise a value error if the YAML file cannot be parsed
+            raise ValueError(f"Error parsing YAML file: {e}")
 
-    except FileNotFoundError as e:
-        # Re-raise the file not found error for upstream handling
-        raise e
+    def ensure_path(self, path: str, is_file: bool = False) -> bool:
+        """
+        Ensure a path is valid: check for files or create directories as needed.
 
-    except yaml.YAMLError as e:
-        # Raise an error for YAML parsing issues
-        raise ValueError(f"Error parsing YAML file: {e}")
+        Args:
+            path (str): Path to check or create.
+            is_file (bool): Whether the path is a file (default: False).
 
-    except Exception as e:
-        # Raise a generic error for unexpected issues
-        raise RuntimeError(f"Unexpected error while loading config.yaml: {e}")
-
-
-def ensure_path(path: str, is_file: bool = False) -> None:
-    """
-    Ensure a path is valid: check for files or create directories as needed.
-
-    Args:
-        path (str): Path to check or create.
-        is_file (bool): Whether the path is a file (default: False).
-
-    How It Works:
-        - For files: Logs a warning if missing.
-        - For directories: Creates them if they do not exist.
-    """
-    try:
-        # Check if the path already exists
+        Returns:
+            bool: True if the path is valid or created, False otherwise.
+        """
+        # Check if the path exists
         if os.path.exists(path):
-            # Check if the existing path matches its expected type
+            # If the path is supposed to be a file but is not, log an error
             if is_file and not os.path.isfile(path):
-                print(f"[✘] Path exists but is not a file: {path}")
-            elif not is_file and not os.path.isdir(path):
-                print(f"[✘] Path exists but is not a directory: {path}")
-            else:
-                # Log a success message if the path is valid
-                print(f"[✔] {'File' if is_file else 'Directory'} exists: {path}")
-        else:
-            # Handle missing files
-            if is_file:
-                print(f"[⚠] Required file missing: {path}. Skipping...")
-            else:
-                # Attempt to create missing directories
-                print(f"[✘] Directory does NOT exist: {path}. Attempting to create it.")
-                os.makedirs(path, exist_ok=True)
-                print(f"[✔] Directory created: {path}")
-    except Exception as e:
-        # Log any errors encountered during path validation
-        print(f"[⚠] Error ensuring path '{path}': {e}. Continuing...")
+                self.logger.error(f"Path exists but is not a file: {path}")
+                return False
+            # If the path is supposed to be a directory but is not, log an error
+            if not is_file and not os.path.isdir(path):
+                self.logger.error(f"Path exists but is not a directory: {path}")
+                return False
+            # Log a success message if the path is valid
+            self.logger.info(f"Valid {'file' if is_file else 'directory'}: {path}")
+            return True
 
+        # If the path is supposed to be a file but does not exist, log a warning
+        if is_file:
+            self.logger.warning(f"Missing required file: {path}")
+            return False
 
-def validate_paths(config: Dict):
-    """
-    Validate and ensure all paths in the configuration file exist.
+        # If the path is supposed to be a directory, create it
+        os.makedirs(path, exist_ok=True)
+        # Log a success message after creating the directory
+        self.logger.info(f"Created directory: {path}")
+        return True
 
-    Args:
-        config (Dict): Configuration dictionary with absolute paths.
+    def validate_paths(self) -> None:
+        """
+        Validate and ensure all paths in the configuration file exist.
+        """
+        # Log the start of global path validation
+        self.logger.info("Validating global paths...")
+        # Iterate through global paths in the configuration and validate each
+        for key, path in self.config.get("global", {}).items():
+            self.ensure_path(path, is_file=key.endswith("_file"))
 
-    How It Works:
-        - Iterates through global and Crunch-specific paths.
-        - Ensures files exist and directories are created if missing.
-    """
-    print("\n--- Validating Project Directories and Files ---\n")
-
-    try:
-        # Validate paths in the global configuration section
-        print("[INFO] Validating global paths...")
-        for key, path in config["global"].items():
-            # Check if the key corresponds to a file or directory
-            is_file = key.endswith("_file")
-            ensure_path(path, is_file=is_file)
-
-        # Validate Crunch-specific paths
-        for crunch_name, crunch_config in config["crunches"].items():
-            print(f"\n--- Validating Paths for {crunch_name} ---")
-            for key, path in crunch_config["paths"].items():
-                # Determine if the path corresponds to a file or directory
-                is_file = key.endswith("_file")
-                ensure_path(path, is_file=is_file)
-
-    except KeyError as e:
-        # Handle missing keys in the configuration
-        print(f"[⚠] Missing key in configuration file: {e}. Continuing...")
-
-    except Exception as e:
-        # Log any unexpected errors during validation
-        print(f"[⚠] An unexpected error occurred during path validation: {e}. Continuing...")
-
-    print("\n--- Directory and File Validation Complete ---\n")
-
+        # Iterate through Crunch-specific configurations
+        for crunch_name, crunch_config in self.config.get("crunches", {}).items():
+            # Log the start of validation for the specific Crunch
+            self.logger.info(f"Validating paths for {crunch_name}...")
+            # Validate each path in the Crunch-specific configuration
+            for key, path in crunch_config.get("paths", {}).items():
+                self.ensure_path(path, is_file=key.endswith("_file"))
 
 if __name__ == "__main__":
-    """
-    Main script execution: Load the configuration file and validate all paths.
-    """
+    import argparse  # For parsing command-line arguments
+
+    # Set up argument parsing
+    parser = argparse.ArgumentParser(description="Validate project paths based on the configuration file.")
+    # Add an argument for specifying the configuration file path
+    parser.add_argument(
+        "--config", type=str, default="../../config.yaml", help="Path to the configuration file."
+    )
+    args = parser.parse_args()
+
     try:
-        # Define the path to the configuration file
-        config_file_path = "../../config.yaml"
-
-        # Load the configuration file into a dictionary
-        config = load_config(config_file_path)
-
-        # Validate all paths based on the loaded configuration
-        validate_paths(config)
-
-    except FileNotFoundError as e:
-        # Handle missing configuration file errors
-        print(f"Error: {e}")
-
-    except ValueError as e:
-        # Handle YAML parsing errors
-        print(f"Configuration Error: {e}")
-
+        # Create an instance of PathValidator with the specified config file
+        validator = PathValidator(config_path=args.config)
+        # Validate all paths in the configuration
+        validator.validate_paths()
     except Exception as e:
-        # Handle any unexpected errors
-        print(f"An unexpected error occurred: {e}")
+        # Log any unexpected errors during execution
+        print(f"[ERROR] {e}")

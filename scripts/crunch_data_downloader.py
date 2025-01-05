@@ -46,7 +46,7 @@ def load_config() -> Dict:
         raise RuntimeError(f"Unexpected error while loading config.yaml: {e}")
 
 # Function to validate the configuration structure
-def validate_config(config: Dict):
+def validate_config(config: Dict) -> None:
     """
     Validate the structure of the configuration file.
 
@@ -69,7 +69,7 @@ def validate_config(config: Dict):
         raise ValueError("Missing 'token_file' in global configuration.")
 
 # Function to validate Crunch CLI installation
-def validate_crunch_cli():
+def validate_crunch_cli()-> None:
     """
     Ensure that the Crunch CLI is installed and accessible.
 
@@ -130,7 +130,7 @@ def load_manifest() -> Dict:
     return {}
 
 # Function to save the manifest
-def save_manifest(manifest: Dict):
+def save_manifest(manifest: Dict) -> None:
     """
     Save the manifest file.
 
@@ -142,7 +142,7 @@ def save_manifest(manifest: Dict):
         json.dump(manifest, file, indent=4)
 
 # Function to update the manifest
-def update_manifest(manifest: Dict, crunch_name: str, file_path: str, status: str, size: int = 0):
+def update_manifest(manifest: Dict, crunch_name: str, file_path: str, status: str, size: int = 0) -> None:
     """
     Update the manifest with the status of a file.
 
@@ -219,7 +219,7 @@ def download_data(competition_name: str, project_name: str, dataset_size: str, t
         return False
 
 # Function to process a single crunch
-def process_crunch(crunch_name: str, config: Dict, token: str, manifest: Dict, dry_run: bool):
+def process_crunch(crunch_name: str, config: Dict, token: str, manifest: Dict, dry_run: bool) -> None:
     """
     Process and download data for a specific crunch.
 
@@ -241,7 +241,13 @@ def process_crunch(crunch_name: str, config: Dict, token: str, manifest: Dict, d
     print(f"Processing {crunch_name}...")
 
     # Define the download task
-    def download_task():
+    def download_task() -> bool:
+        """
+        Download the data for the current crunch.
+
+        Returns:
+            bool: True if the download was successful, False otherwise.
+        """
         return download_data(
             config["crunch_type"],
             config["name"],
@@ -269,6 +275,8 @@ def process_crunch(crunch_name: str, config: Dict, token: str, manifest: Dict, d
 def main():
     """
     Main script for managing downloads for CrunchDAO challenges.
+
+    This script reads the configuration, validates it, and processes the Crunches
     """
     # Record the start time for runtime measurement
     start_time = time.time()
