@@ -26,7 +26,7 @@ imageio==2.36.1          # Reading/writing images
 imagecodecs==2024.6.1    # Image compression/decompression codecs
 ome-zarr==0.9.0          # Zarr format for microscopy data
 zarr==2.18.3             # Hierarchical storage for large datasets
-tifffile                 # TIFF file reading/writing
+tifffile~=2024.9.20
 
 # Visualization
 matplotlib==3.9.3        # Visualization library
@@ -41,7 +41,7 @@ cloudpickle==3.1.0       # Serialization of Python objects
 pydantic==2.10.3         # Data validation and settings management
 crunch-cli==5.7.3        # CrunchDAO CLI tool for data competitions
 h5py==3.12.1             # HDF5 format reader/writer
-pytest                   # Testing framework
+pytest~=8.3.4            # Testing framework
 
 # Distributed and Parallel Computing
 dask==2024.12.0          # Parallel and distributed computing
@@ -53,5 +53,7 @@ ipython==8.30.0          # Interactive Python shell
 jupyterlab==4.3.3        # JupyterLab IDE
 plotly~=5.24.1
 
-PyYAML~=6.0.2
-tqdm~=4.67.1
+PyYAML~=6.0.2           # YAML parser for configuration files
+tqdm~=4.67.1            # Progress bar for loops
+
+joblib~=1.4.2           # Joblib for parallel computing

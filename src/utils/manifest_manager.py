@@ -1,7 +1,8 @@
 # File: src/utils/manifest_manager.py
-import os  # Module for working with file paths
-import json  # Module for reading and writing JSON data
-from typing import Dict  # Type hints for dictionaries
+
+import os  # Import os module for handling file paths
+import json  # Import json module for reading and writing JSON data
+from typing import Dict  # Import Dict type hint for function annotations
 
 
 class ManifestManager:
@@ -16,7 +17,7 @@ class ManifestManager:
         Args:
             manifest_path (str): Path to the manifest file.
         """
-        # Store the path to the manifest file for future operations
+        # Save the path to the manifest file for future operations
         self.manifest_path = manifest_path
 
     def load_manifest(self) -> Dict:
@@ -28,20 +29,26 @@ class ManifestManager:
         """
         # Check if the manifest file exists
         if not os.path.exists(self.manifest_path):
-            # Inform the user that a new manifest will be created
-            print(f"Manifest file not found at {self.manifest_path}. Starting with an empty manifest.")
-            return {}  # Return an empty dictionary as the default manifest
+            # Print a message if the manifest file does not exist and return an empty dictionary
+            print(f"[INFO] Manifest file not found at {self.manifest_path}. Starting with an empty manifest.")
+            return {}
 
         try:
-            # Open and read the manifest JSON file
+            # Open the manifest file in read mode
             with open(self.manifest_path, "r") as file:
-                return json.load(file)  # Parse and return the contents as a dictionary
+                # Parse the JSON content of the file
+                manifest = json.load(file)
+                # Ensure the loaded manifest is a dictionary
+                if not isinstance(manifest, dict):
+                    raise ValueError("Manifest content is not a valid dictionary.")
+                # Return the loaded manifest as a dictionary
+                return manifest
         except json.JSONDecodeError:
-            # Handle invalid JSON formatting gracefully
-            raise ValueError(f"Error parsing the manifest file at {self.manifest_path}. Ensure it is valid JSON.")
+            # Handle and raise an error if the JSON is malformed
+            raise ValueError(f"[ERROR] Malformed JSON in manifest file: {self.manifest_path}.")
         except Exception as e:
-            # Handle unexpected errors during file reading
-            raise RuntimeError(f"Unexpected error while loading the manifest file: {e}")
+            # Catch and raise any other unexpected errors during file reading
+            raise RuntimeError(f"[ERROR] Unexpected error loading manifest: {e}")
 
     def save_manifest(self, manifest: Dict):
         """
@@ -50,15 +57,20 @@ class ManifestManager:
         Args:
             manifest (Dict): The manifest data to save.
         """
+        # Ensure the manifest is a dictionary before proceeding
+        if not isinstance(manifest, dict):
+            raise ValueError("[ERROR] Provided manifest is not a valid dictionary.")
+
         try:
-            # Write the provided manifest dictionary to the JSON file
+            # Open the manifest file in write mode
             with open(self.manifest_path, "w") as file:
-                json.dump(manifest, file, indent=4)  # Use indentation for readable formatting
-            # Notify the user that the manifest was saved successfully
-            print(f"Manifest saved to {self.manifest_path}.")
+                # Serialize the dictionary and save it as JSON with indentation for readability
+                json.dump(manifest, file, indent=4)
+            # Print a success message after the manifest is saved
+            print(f"[INFO] Manifest successfully saved to {self.manifest_path}.")
         except PermissionError:
-            # Handle file permission issues
-            raise PermissionError(f"Permission denied while saving the manifest to {self.manifest_path}.")
+            # Handle and raise an error if there are insufficient permissions to write to the file
+            raise PermissionError(f"[ERROR] Permission denied when writing to manifest file: {self.manifest_path}.")
         except Exception as e:
-            # Handle other unexpected errors during file writing
-            raise RuntimeError(f"Unexpected error while saving the manifest file: {e}")
+            # Catch and raise any other unexpected errors during file writing
+            raise RuntimeError(f"[ERROR] Unexpected error saving manifest: {e}")

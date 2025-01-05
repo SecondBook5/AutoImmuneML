@@ -1,4 +1,5 @@
 # Autoimmune Disease Machine Learning Challenge Data Downloader
+# File: scripts/crunch_data_downloader.py
 # This script downloads and sets up the workspace for CrunchDAO challenges using the Crunch CLI.
 
 import os
