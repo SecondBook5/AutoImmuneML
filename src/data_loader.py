@@ -59,12 +59,26 @@ class DataLoader:
 
         Returns:
             str: The validated path.
+
+        Raises:
+            FileNotFoundError: If the path is not defined or invalid.
         """
         # Retrieve the path for the specified key from the configuration
         path = self.config.get_crunch_path(self.crunch_name, key)
 
-        # Validate the path, ensuring it exists and is the correct type (file or directory)
-        self.path_validator.ensure_path(path, is_file=is_file)
+        # Check if the path is None and log an appropriate error
+        if not path:
+            error_message = f"Path Key '{key}' not found in configuration for '{self.crunch_name}'"
+            self.path_validator.logger.error(error_message)
+            raise FileNotFoundError(error_message)
+
+        # Validate the path using PathValidator
+        try:
+            self.path_validator.ensure_path(path, is_file=is_file)
+        except FileNotFoundError as e:
+            # Log the error if path validation fails
+            self.path_validator.logger.error(f"Validation failed for path: {path}. Error: {e}")
+            raise
 
         # Return the validated path
         return path
