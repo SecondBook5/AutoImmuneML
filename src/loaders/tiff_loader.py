@@ -1,3 +1,4 @@
+# File: src/loaders/tiff_loader.py
 import tifffile as tiff
 from src.loaders.base_loader import BaseLoader
 
