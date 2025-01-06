@@ -1,14 +1,14 @@
-import pandas as pd  # For handling .csv files
-import anndata as ad  # For handling .h5ad files
-from tqdm import tqdm  # For progress tracking
-from typing import Any, Dict, List, Union, Generator
-from concurrent.futures import ThreadPoolExecutor, as_completed  # For parallel processing
-from src.loaders.h5ad_loader import H5ADLoader
-from src.loaders.tiff_loader import TIFFLoader
-from src.loaders.zarr_loader import ZARRLoader
-from src.loaders.csv_loader import CSVLoader
-from src.utils.config_loader import ConfigLoader  # For loading configuration settings
-from src.utils.path_validator import PathValidator  # For validating paths
+import pandas as pd  # Import pandas for handling .csv files
+import anndata as ad  # Import anndata for handling .h5ad files
+from tqdm import tqdm  # Import tqdm for progress tracking
+from typing import Any, Dict, List, Union, Generator  # Import type annotations
+from concurrent.futures import ThreadPoolExecutor, as_completed  # Import for parallel processing
+from src.loaders.h5ad_loader import H5ADLoader  # Import loader for .h5ad files
+from src.loaders.tiff_loader import TIFFLoader  # Import loader for .tiff files
+from src.loaders.zarr_loader import ZARRLoader  # Import loader for .zarr files
+from src.loaders.csv_loader import CSVLoader  # Import loader for .csv files
+from src.utils.config_loader import ConfigLoader  # Import configuration loader
+from src.utils.path_validator import PathValidator  # Import path validator
 
 
 class DataLoader:
@@ -16,11 +16,12 @@ class DataLoader:
     A class for managing the loading of various data formats required for the Autoimmune Disease Machine Learning Challenge.
 
     Features:
-    - Supports individual file-type loading (e.g., Zarr-specific loading with `load_zarr`).
+    - Handles single or directory-based Zarr files intelligently.
     - Batch and parallel processing for faster loading.
     - Streaming support for `.csv` and `.h5ad` files.
     """
 
+    ### 1. Initialization and Validation ###
     def __init__(self, config: ConfigLoader, crunch_name: str, max_workers: int = 4, batch_size: int = 2):
         """
         Initialize the DataLoader with configuration settings and path validation.
@@ -31,11 +32,20 @@ class DataLoader:
             max_workers (int): Number of parallel workers for processing (default: 4).
             batch_size (int): Number of datasets to process in each batch (default: 2).
         """
-        self.config = config  # Configuration loader instance
-        self.crunch_name = crunch_name  # Name of the Crunch (e.g., "crunch1")
-        self.path_validator = PathValidator(config_path=config.config_path)  # Initialize PathValidator
-        self.max_workers = max_workers  # Define the number of parallel workers
-        self.batch_size = batch_size  # Define the batch size for processing
+        # Store the configuration loader instance
+        self.config = config
+
+        # Store the Crunch name
+        self.crunch_name = crunch_name
+
+        # Initialize PathValidator to ensure all paths are valid
+        self.path_validator = PathValidator(config_path=config.config_path)
+
+        # Define the maximum number of workers for parallel processing
+        self.max_workers = max_workers
+
+        # Define the batch size for processing
+        self.batch_size = batch_size
 
     def validate_path(self, key: str, is_file: bool = True) -> str:
         """
@@ -48,9 +58,47 @@ class DataLoader:
         Returns:
             str: The validated path.
         """
-        path = self.config.get_crunch_path(self.crunch_name, key)  # Retrieve the path from the configuration
-        self.path_validator.ensure_path(path, is_file=is_file)  # Validate the path
-        return path  # Return the validated path
+        # Retrieve the path from the configuration using the Crunch name and key
+        path = self.config.get_crunch_path(self.crunch_name, key)
+
+        # Validate the path using PathValidator
+        self.path_validator.ensure_path(path, is_file=is_file)
+
+        # Return the validated path
+        return path
+
+    ### 2. Loading Individual Datasets ###
+    def load_batch(self, keys: List[str], loader_class: Any) -> Dict[str, Any]:
+        """
+        Load a batch of datasets in parallel.
+
+        Args:
+            keys (List[str]): List of dataset keys to load.
+            loader_class (Any): Loader class to use.
+
+        Returns:
+            Dict[str, Any]: Dictionary of loaded datasets with keys as dataset names.
+        """
+        # Initialize an empty dictionary to store the results
+        results = {}
+
+        # Use ThreadPoolExecutor for parallel loading
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Submit tasks for each key to the executor and track their futures
+            futures = {executor.submit(self._load_with_loader, key, loader_class): key for key in keys}
+
+            # Process each future as it completes
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Loading batch"):
+                key = futures[future]
+                try:
+                    # Store the result of the loaded dataset
+                    results[key] = future.result()
+                except Exception as e:
+                    # Log any errors encountered during loading
+                    self.path_validator.logger.error(f"Error loading {key}: {e}")
+
+        # Return the dictionary of loaded datasets
+        return results
 
     def _load_with_loader(self, key: str, loader_class: Any) -> Any:
         """
@@ -63,31 +111,49 @@ class DataLoader:
         Returns:
             Any: Loaded dataset.
         """
-        path = self.validate_path(key, is_file=True)  # Validate the path for the dataset
-        return loader_class(path).load()  # Use the specified loader to load the dataset
+        # Validate the file path for the dataset
+        path = self.validate_path(key, is_file=True)
 
-    def load_batch(self, keys: List[str], loader_class: Any) -> Dict[str, Any]:
+        # Use the specified loader to load the dataset
+        return loader_class(path).load()
+
+    ### 3. Zarr-Specific Loading ###
+    def load_zarr(self, keys: Union[str, List[str]]) -> Dict[str, Any]:
         """
-        Load a batch of datasets in parallel.
+        Load Zarr files or directories containing multiple Zarr datasets.
 
         Args:
-            keys (List[str]): List of dataset keys to load.
-            loader_class (Any): Loader class to use.
+            keys (Union[str, List[str]]): A single Zarr key or a list of keys to load.
 
         Returns:
-            Dict[str, Any]: Dictionary of loaded datasets with keys as dataset names.
+            Dict[str, Any]: A dictionary of Zarr datasets, keyed by their names.
         """
-        results = {}
+        # Ensure `keys` is a list for uniform processing
+        if isinstance(keys, str):
+            keys = [keys]
+
+        # Initialize a dictionary to store loaded Zarr datasets
+        zarr_datasets = {}
+
+        # Use ThreadPoolExecutor for parallel loading
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = {executor.submit(self._load_with_loader, key, loader_class): key for key in keys}
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Loading batch"):
+            # Submit tasks for each Zarr key and track their futures
+            futures = {executor.submit(self._load_with_loader, key, ZARRLoader): key for key in keys}
+
+            # Process each future as it completes
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Loading Zarr files"):
                 key = futures[future]
                 try:
-                    results[key] = future.result()  # Store the result
+                    # Store the loaded Zarr dataset
+                    zarr_datasets[key] = future.result()
                 except Exception as e:
-                    self.path_validator.logger.error(f"Error loading {key}: {e}")  # Log any errors
-        return results
+                    # Log any errors encountered during loading
+                    self.path_validator.logger.error(f"Error loading Zarr file {key}: {e}")
 
+        # Return the dictionary of loaded Zarr datasets
+        return zarr_datasets
+
+    ### 4. Streaming for Large Datasets ###
     def stream_csv(self, key: str, chunk_size: int = 1000) -> Generator[pd.DataFrame, None, None]:
         """
         Stream a .csv file in chunks.
@@ -99,8 +165,11 @@ class DataLoader:
         Yields:
             pandas.DataFrame: A chunk of the loaded CSV data.
         """
-        path = self.validate_path(key, is_file=True)  # Validate the .csv file path
-        for chunk in pd.read_csv(path, chunksize=chunk_size):  # Read and yield chunks
+        # Validate the .csv file path
+        path = self.validate_path(key, is_file=True)
+
+        # Use pandas to read the .csv file in chunks and yield each chunk
+        for chunk in pd.read_csv(path, chunksize=chunk_size):
             yield chunk
 
     def stream_h5ad(self, key: str, chunk_size: int = 1000) -> Generator[ad.AnnData, None, None]:
@@ -114,11 +183,17 @@ class DataLoader:
         Yields:
             anndata.AnnData: A chunk of the loaded AnnData object.
         """
-        path = self.validate_path(key, is_file=True)  # Validate the .h5ad file path
-        adata = ad.read_h5ad(path)  # Load the full .h5ad dataset
-        for i in range(0, adata.shape[0], chunk_size):  # Yield chunks of the dataset
+        # Validate the .h5ad file path
+        path = self.validate_path(key, is_file=True)
+
+        # Load the full .h5ad dataset
+        adata = ad.read_h5ad(path)
+
+        # Yield chunks of the dataset
+        for i in range(0, adata.shape[0], chunk_size):
             yield adata[i : i + chunk_size]
 
+    ### 5. Orchestrated Loading ###
     def load_all(self, streaming: bool = False) -> Dict[str, Any]:
         """
         Validate and load all datasets for the specified Crunch.
@@ -129,7 +204,10 @@ class DataLoader:
         Returns:
             Dict[str, Any]: A dictionary with loaded datasets or streaming generators.
         """
-        datasets = {}  # Initialize an empty dictionary to store datasets
+        # Initialize an empty dictionary to store datasets
+        datasets = {}
+
+        # Define dataset keys for each file type
         h5ad_keys = ["scRNA_seq_file"]
         tiff_keys = ["he_image_file", "he_label_file", "he_dysplasia_roi_file"]
         zarr_keys = ["raw_dir", "interim_dir"]
@@ -140,10 +218,11 @@ class DataLoader:
             datasets["h5ad_streams"] = {key: self.stream_h5ad(key) for key in h5ad_keys}
             datasets["csv_streams"] = {key: self.stream_csv(key) for key in csv_keys}
         else:
-            # Load datasets fully for all formats
+            # Fully load datasets for all formats
             datasets["h5ad_files"] = self.load_batch(h5ad_keys, H5ADLoader)
             datasets["tiff_files"] = self.load_batch(tiff_keys, TIFFLoader)
-            datasets["zarr_files"] = self.load_batch(zarr_keys, ZARRLoader)
+            datasets["zarr_files"] = self.load_zarr(zarr_keys)
             datasets["csv_files"] = self.load_batch(csv_keys, CSVLoader)
 
+        # Return the dictionary of loaded datasets
         return datasets
