@@ -142,7 +142,7 @@ class DataLoader:
             keys (Union[str, List[str]]): A single Zarr key or a list of keys to load.
 
         Returns:
-            Dict[str, Any]: A dictionary of Zarr datasets, keyed by their names.
+            Dict[str, Any]: A dictionary of Zarr datasets, keyed by their names or paths.
         """
         # Ensure `keys` is a list for consistent processing
         if isinstance(keys, str):
@@ -153,21 +153,33 @@ class DataLoader:
 
         # Use ThreadPoolExecutor for parallel processing of Zarr files
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # Submit tasks for loading each Zarr key
-            futures = {executor.submit(self._load_with_loader, key, ZARRLoader): key for key in keys}
+            # Submit tasks for loading each Zarr key using the specified loader
+            futures = {
+                executor.submit(self._load_with_loader, key, ZARRLoader): key
+                for key in keys
+            }
 
             # Process completed futures using tqdm for progress tracking
             for future in tqdm(as_completed(futures), total=len(futures), desc="Loading Zarr files"):
                 key = futures[future]
                 try:
-                    # Store the result of the successfully loaded Zarr dataset
-                    zarr_datasets[key] = future.result()
+                    # Attempt to retrieve the result of the future
+                    result = future.result()
+
+                    # If the result is a dictionary, it indicates multiple Zarr groups
+                    if isinstance(result, dict):
+                        # Merge the loaded groups into the main dataset dictionary
+                        zarr_datasets.update(result)
+                    else:
+                        # Otherwise, store the single Zarr group under the specified key
+                        zarr_datasets[key] = result
                 except Exception as e:
-                    # Log any errors that occur during loading
+                    # Log any errors encountered while loading Zarr files
                     self.path_validator.logger.error(f"Error loading Zarr file {key}: {e}")
 
-        # Return the dictionary of loaded Zarr datasets
+        # Return the dictionary containing all loaded Zarr datasets
         return zarr_datasets
+
 
     ### 4. Streaming for Large Datasets ###
     def stream_csv(self, key: str, chunk_size: int = None) -> Generator[pd.DataFrame, None, None]:

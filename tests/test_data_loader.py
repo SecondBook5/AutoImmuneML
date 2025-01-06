@@ -1,6 +1,7 @@
 import pytest
 import pandas as pd
 import numpy as np
+import os
 from anndata import AnnData
 from unittest.mock import patch
 from src.data_loader import DataLoader
@@ -59,12 +60,37 @@ def test_load_batch(data_loader):
 
 def test_load_zarr(data_loader):
     """
-    Test the loading of Zarr files.
+    Test the loading of Zarr files and handling of directories containing multiple Zarr datasets.
     """
-    with patch("src.loaders.zarr_loader.ZARRLoader.load", return_value={"mock_key": "mock_value"}):
-        result = data_loader.load_zarr(["raw_dir"])
-        assert "raw_dir" in result  # Ensure the key exists in the result
-        assert isinstance(result["raw_dir"], dict)  # Ensure the value is a dictionary
+    # Ensure the configuration contains a valid path for "raw_dir"
+    zarr_key = "raw_dir"
+    zarr_path = data_loader.config.get_crunch_path("crunch3", zarr_key)
+    assert zarr_path, f"Configuration missing path for key '{zarr_key}' in 'crunch3'."
+
+    # Check that the path exists and is a directory
+    assert os.path.exists(zarr_path), f"Path '{zarr_path}' does not exist."
+    assert os.path.isdir(zarr_path), f"Path '{zarr_path}' is not a directory."
+
+    # Load the Zarr dataset
+    result = data_loader.load_zarr([zarr_key])
+
+    # Assertions to verify the loaded data
+    expected_key = "UC9_I.zarr"  # Adjust this key based on the actual Zarr dataset name
+    assert expected_key in result, f"Expected Zarr dataset '{expected_key}' not found in result."
+    loaded_data = result[expected_key]
+
+    # Check that the loaded data is a SpatialData object
+    from spatialdata import SpatialData
+    assert isinstance(loaded_data, SpatialData), f"Loaded data for '{expected_key}' is not a SpatialData object."
+
+    # Verify the presence of expected components in the SpatialData object
+    assert "HE_nuc_original" in loaded_data.images.keys(), "'HE_nuc_original' not found in images."
+    assert "HE_original" in loaded_data.images.keys(), "'HE_original' not found in images."
+    assert "anucleus" in loaded_data.tables.keys(), "'anucleus' not found in tables."
+    assert "cell_id-group" in loaded_data.tables.keys(), "'cell_id-group' not found in tables."
+
+
+
 
 
 def test_stream_csv(data_loader):

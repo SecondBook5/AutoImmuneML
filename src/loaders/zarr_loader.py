@@ -1,96 +1,103 @@
 # File: src/loaders/zarr_loader.py
 import os  # For file and directory operations
-import zarr  # For working with Zarr datasets
-from src.loaders.base_loader import BaseLoader  # Base class for loaders
+import spatialdata as sd  # For working with SpatialData, a wrapper around Zarr datasets
 from typing import Dict, Union  # For type annotations
 
 
-class ZARRLoader(BaseLoader):
+class ZARRLoader:
     """
-    Loader for .zarr files or directories containing multiple .zarr datasets, inheriting from BaseLoader.
+    Loader for Zarr files or directories containing multiple Zarr datasets.
 
     - Handles both single Zarr datasets and directories containing multiple `.zarr` groups.
-    - Provides robust error handling and logging for invalid paths or datasets.
+    - Provides robust error handling and clear error messages for invalid paths or datasets.
     """
 
-    def load(self) -> Union[zarr.Group, Dict[str, zarr.Group]]:
+    def __init__(self, path: str):
         """
-        Load Zarr data.
+        Initialize the ZARRLoader with the path to a Zarr dataset or directory.
 
-        - If the path points to a single .zarr dataset, it loads and returns the Zarr group.
-        - If the path points to a directory, it loads all valid .zarr datasets in the directory.
+        Args:
+            path (str): Path to a single Zarr file or a directory containing Zarr datasets.
+        """
+        self.path = path
+
+    def load(self) -> Union[sd.SpatialData, Dict[str, sd.SpatialData]]:
+        """
+        Load Zarr data from the given path.
+
+        - If the path points to a single `.zarr` dataset, return the SpatialData object.
+        - If the path points to a directory, load all `.zarr` datasets in the directory.
 
         Returns:
-            Union[zarr.Group, Dict[str, zarr.Group]]:
-                - zarr.Group: If the path points to a single Zarr dataset.
-                - Dict[str, zarr.Group]: A dictionary of Zarr groups if the path points to a directory.
+            Union[sd.SpatialData, Dict[str, sd.SpatialData]]:
+                - sd.SpatialData: If the path points to a single Zarr dataset.
+                - Dict[str, sd.SpatialData]: A dictionary of SpatialData objects if the path points to a directory.
 
         Raises:
             FileNotFoundError: If the path does not exist.
-            zarr.errors.GroupNotFoundError: If the path does not contain valid Zarr data.
+            ValueError: If the path is neither a `.zarr` file nor a directory containing `.zarr` files.
         """
         # Ensure the specified path exists
         if not os.path.exists(self.path):
             raise FileNotFoundError(f"Path does not exist: {self.path}")
 
-        # Check if the path is a directory but not a single .zarr dataset
-        if os.path.isdir(self.path) and not self.path.endswith(".zarr"):
-            # Load all valid Zarr groups in the directory
-            return self._load_all_zarr_groups()
+        if os.path.isfile(self.path) and self.path.endswith(".zarr"):
+            # Load a single Zarr dataset
+            return self._load_single_zarr(self.path)
+        elif os.path.isdir(self.path):
+            # Load all Zarr datasets in the directory
+            return self._load_all_zarr_in_directory()
         else:
-            # Load a single Zarr group
-            return self._load_single_group(self.path)
+            raise ValueError(f"Invalid Zarr path: {self.path}. Must be a .zarr file or a directory containing .zarr files.")
 
-    def _load_single_group(self, path: str) -> zarr.Group:
+    def _load_single_zarr(self, zarr_path: str) -> sd.SpatialData:
         """
-        Load a single Zarr group.
+        Load a single Zarr dataset.
 
         Args:
-            path (str): Path to a single Zarr group.
+            zarr_path (str): Path to a single Zarr dataset.
 
         Returns:
-            zarr.Group: The loaded Zarr group.
+            sd.SpatialData: The loaded SpatialData object.
 
         Raises:
-            zarr.errors.GroupNotFoundError: If the group is not found.
+            ValueError: If the file is not a valid Zarr dataset.
         """
         try:
-            # Attempt to open the specified path as a Zarr group
-            return zarr.open_group(path, mode="r")
-        except zarr.errors.GroupNotFoundError:
-            # Raise a clear error if the path does not contain a valid Zarr group
-            raise zarr.errors.GroupNotFoundError(f"Zarr group not found at path: {path}")
+            return sd.read_zarr(zarr_path)
+        except Exception as e:
+            raise ValueError(f"Failed to load Zarr dataset at {zarr_path}: {e}")
 
-    def _load_all_zarr_groups(self) -> Dict[str, zarr.Group]:
+    def _load_all_zarr_in_directory(self) -> Dict[str, sd.SpatialData]:
         """
-        Load all valid Zarr groups in the directory.
+        Load all `.zarr` datasets in the specified directory.
 
         Returns:
-            Dict[str, zarr.Group]: A dictionary where keys are group names, and values are Zarr group objects.
+            Dict[str, sd.SpatialData]: A dictionary of loaded SpatialData objects.
 
         Raises:
-            FileNotFoundError: If no valid `.zarr` datasets are found in the directory.
+            FileNotFoundError: If no `.zarr` files are found in the directory.
         """
-        # Initialize an empty dictionary to store Zarr groups
-        zarr_groups = {}
+        # Find all directories in the specified path that end with ".zarr"
+        zarr_files = [
+            os.path.join(self.path, item)
+            for item in os.listdir(self.path)
+            if os.path.isdir(os.path.join(self.path, item)) and item.endswith(".zarr")
+        ]
+        # Check if any valid Zarr files were found
+        if not zarr_files:
+            raise FileNotFoundError(f"No valid .zarr datasets found in directory: {self.path}")
 
-        # Iterate through each item in the directory
-        for item in os.listdir(self.path):
-            # Construct the full path for the current item
-            item_path = os.path.join(self.path, item)
-
-            # Check if the item is a directory and ends with '.zarr'
-            if os.path.isdir(item_path) and item.endswith(".zarr"):
-                try:
-                    # Attempt to load the Zarr group and add it to the dictionary
-                    zarr_groups[item] = self._load_single_group(item_path)
-                except zarr.errors.GroupNotFoundError:
-                    # Log a warning and skip the item if it is not a valid Zarr group
-                    print(f"Warning: {item_path} is not a valid Zarr group. Skipping...")
-
-        # If no valid Zarr groups were found, raise an error
-        if not zarr_groups:
-            raise FileNotFoundError(f"No valid Zarr datasets found in directory: {self.path}")
-
-        # Return the dictionary of loaded Zarr groups
-        return zarr_groups
+        # Load all Zarr datasets in the directory into a dictionary
+        zarr_datasets = {}
+        # Iterate over each Zarr file and load it
+        for zarr_file in zarr_files:
+            try:
+                # Extract the dataset name from the file path (e.g., "UC1_NI.zarr")
+                dataset_name = os.path.basename(zarr_file)
+                # Load the Zarr dataset and store it in the dictionary with the dataset name
+                zarr_datasets[dataset_name] = self._load_single_zarr(zarr_file)
+            except Exception as e:
+                print(f"Warning: Failed to load Zarr dataset {zarr_file}: {e}")
+        # Return the dictionary of loaded Zarr datasets
+        return zarr_datasets
