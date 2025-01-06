@@ -1,12 +1,16 @@
-import os
-import zarr
-from src.loaders.base_loader import BaseLoader
-from typing import Dict, Union
+# File: src/loaders/zarr_loader.py
+import os  # For file and directory operations
+import zarr  # For working with Zarr datasets
+from src.loaders.base_loader import BaseLoader  # Base class for loaders
+from typing import Dict, Union  # For type annotations
 
 
 class ZARRLoader(BaseLoader):
     """
     Loader for .zarr files or directories containing multiple .zarr datasets, inheriting from BaseLoader.
+
+    - Handles both single Zarr datasets and directories containing multiple `.zarr` groups.
+    - Provides robust error handling and logging for invalid paths or datasets.
     """
 
     def load(self) -> Union[zarr.Group, Dict[str, zarr.Group]]:
@@ -14,16 +18,24 @@ class ZARRLoader(BaseLoader):
         Load Zarr data.
 
         - If the path points to a single .zarr dataset, it loads and returns the Zarr group.
-        - If the path points to a directory, it loads all .zarr datasets in the directory.
+        - If the path points to a directory, it loads all valid .zarr datasets in the directory.
 
         Returns:
             Union[zarr.Group, Dict[str, zarr.Group]]:
                 - zarr.Group: If the path points to a single Zarr dataset.
                 - Dict[str, zarr.Group]: A dictionary of Zarr groups if the path points to a directory.
+
+        Raises:
+            FileNotFoundError: If the path does not exist.
+            zarr.errors.GroupNotFoundError: If the path does not contain valid Zarr data.
         """
+        # Ensure the specified path exists
+        if not os.path.exists(self.path):
+            raise FileNotFoundError(f"Path does not exist: {self.path}")
+
         # Check if the path is a directory but not a single .zarr dataset
         if os.path.isdir(self.path) and not self.path.endswith(".zarr"):
-            # Load all Zarr groups in the directory
+            # Load all valid Zarr groups in the directory
             return self._load_all_zarr_groups()
         else:
             # Load a single Zarr group
@@ -51,10 +63,13 @@ class ZARRLoader(BaseLoader):
 
     def _load_all_zarr_groups(self) -> Dict[str, zarr.Group]:
         """
-        Load all Zarr groups in the directory.
+        Load all valid Zarr groups in the directory.
 
         Returns:
             Dict[str, zarr.Group]: A dictionary where keys are group names, and values are Zarr group objects.
+
+        Raises:
+            FileNotFoundError: If no valid `.zarr` datasets are found in the directory.
         """
         # Initialize an empty dictionary to store Zarr groups
         zarr_groups = {}
@@ -72,6 +87,10 @@ class ZARRLoader(BaseLoader):
                 except zarr.errors.GroupNotFoundError:
                     # Log a warning and skip the item if it is not a valid Zarr group
                     print(f"Warning: {item_path} is not a valid Zarr group. Skipping...")
+
+        # If no valid Zarr groups were found, raise an error
+        if not zarr_groups:
+            raise FileNotFoundError(f"No valid Zarr datasets found in directory: {self.path}")
 
         # Return the dictionary of loaded Zarr groups
         return zarr_groups
