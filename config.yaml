@@ -14,7 +14,7 @@ crunches:
   crunch1:
     name: "autoimmune-crunch1"                                           # Project name for Crunch 1
     crunch_type: "broad-1"                                               # Crunch type for CLI
-    dataset_size: "default"                                              # Options: "default" (small) or "large"
+    dataset_size: "large"                                              # Options: "default" (small) or "large"
 
     paths:
       project_dir: "/mnt/d/AutoImmuneML/broad-1-autoimmune-crunch1"      # Target directory for downloads
@@ -75,7 +75,7 @@ crunches:
   crunch3:
     name: "autoimmune-crunch3"                                           # Project name for Crunch 3
     crunch_type: "broad-3"                                               # Crunch type for CLI
-    dataset_size: "default"                                              # Options: "default" (small) or "large"
+    dataset_size: "large"                                              # Options: "default" (small) or "large"
 
     paths:
       project_dir: "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3"      # Target directory for downloads

@@ -8,7 +8,7 @@ from src.loaders.h5ad_loader import H5ADLoader  # Loader for .h5ad files
 from src.loaders.tiff_loader import TIFFLoader  # Loader for .tiff files
 from src.loaders.zarr_loader import ZARRLoader  # Loader for .zarr files
 from src.loaders.csv_loader import CSVLoader  # Loader for .csv files
-from src.utils.config_loader import ConfigLoader  # Configuration loader
+from src.config.config_loader import ConfigLoader  # Configuration loader
 from src.utils.path_validator import PathValidator  # Path validation utility
 
 
