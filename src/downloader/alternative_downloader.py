@@ -1,5 +1,5 @@
 # Autoimmune Disease Machine Learning Challenge Data Downloader
-# File: scripts/crunch_data_downloader.py
+# File: src/downloader/alternative_downloader.py
 # This script downloads and sets up the workspace for CrunchDAO challenges using the Crunch CLI.
 
 import os
@@ -28,7 +28,7 @@ def load_config() -> Dict:
     import yaml
     try:
         # Define the path to the configuration file
-        config_path = "../config.yaml"
+        config_path = "../../config.yaml"
 
         # Check if the file exists
         if not os.path.exists(config_path):
