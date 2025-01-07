@@ -1,15 +1,17 @@
-# File: src/downloader/crunch_data_downloader.py
-
 import os
 import subprocess
-import time
-from typing import Dict
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeRemainingColumn
+import sys
+
+# Add the project directory to Python's module search path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
+
 from src.config.config_loader import ConfigLoader
-from src.downloader.token_handler import TokenHandler
 from src.downloader.cli_validator import validate_crunch_cli
-from src.downloader.manifest_manager import ManifestManager
+
+console = Console()
 
 
 class CrunchDownloader:
@@ -17,193 +19,136 @@ class CrunchDownloader:
     A class to handle downloading data for the Autoimmune Disease Machine Learning Challenge.
     """
 
-    def __init__(self, config_path: str, manifest_path: str):
+    def __init__(self, config_path: str):
         """
-        Initialize the downloader with configuration, manifest, and token handling.
+        Initialize the downloader with configuration and CLI validation.
 
         Args:
             config_path (str): Path to the YAML configuration file.
-            manifest_path (str): Path to the manifest JSON file.
         """
         self.config_loader = ConfigLoader(config_path)
-        self.manifest_manager = ManifestManager(manifest_path)
+        self.token_file = self.config_loader.get_global_setting("token_file")
+        self.micromamba_path = "/home/secondbook5/micromamba/bin/micromamba"
+        validate_crunch_cli()  # Ensure the Crunch CLI is installed
 
-        # Retrieve the token file path from the global section of the configuration
-        token_file = self.config_loader.get_global_setting("token_file")
-        if not token_file:
+    def write_tokens_to_file(self, tokens):
+        """
+        Write the tokens to the token file.
+
+        Args:
+            tokens (list): List of tokens for each Crunch.
+        """
+        if not self.token_file:
             raise ValueError("[ERROR] Token file path is missing in the configuration.")
-        self.token_handler = TokenHandler(token_file)
+        with open(self.token_file, "w") as file:
+            for token in tokens:
+                file.write(token + "\n")
+        console.log(f"[INFO] Tokens written to {self.token_file}.")
 
-        # Validate CLI installation
-        validate_crunch_cli()
-
-    def download_data(self, crunch_name: str, competition_name: str, project_name: str, dataset_size: str, token: str, output_dir: str, dry_run: bool = False) -> bool:
+    def run_command_in_tmux(self, command: str, pane_name: str):
         """
-        Download data using the Crunch CLI.
+        Run a command in a new `tmux` pane using `micromamba run` for the `autoimmune_ml` environment.
 
         Args:
-            crunch_name (str): Name of the Crunch.
-            competition_name (str): Competition type (e.g., "broad-1").
-            project_name (str): Project name in the Crunch system.
-            dataset_size (str): Dataset size (e.g., "default" or "large").
-            token (str): Authentication token.
-            output_dir (str): Target output directory.
-            dry_run (bool): If True, simulate the download.
-
-        Returns:
-            bool: True if the download succeeds, False otherwise.
+            command (str): The command to execute.
+            pane_name (str): Name of the `tmux` pane.
         """
-        command = [
-            "crunch", "setup",
-            competition_name, project_name,
-            output_dir,
-            "--token", token,
-            "--size", dataset_size,
-        ]
-
-        if dry_run:
-            print(f"[DRY-RUN] Would execute: {' '.join(command)}")
-            return True
-
         try:
-            with tqdm(total=100, desc=f"Downloading {crunch_name}", unit="%", dynamic_ncols=True) as pbar:
-                for i in range(10):  # Simulated progress
-                    time.sleep(0.5)  # Replace with actual progress tracking logic
-                    pbar.update(10)
-            subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            return True
+            # Create a new tmux session if it doesn't already exist
+            subprocess.run(f"tmux new-session -d -s {pane_name}", shell=True, check=True)
+
+            # Use micromamba run to execute the command
+            tmux_command = f"tmux send-keys -t {pane_name} '{self.micromamba_path} run -n autoimmune_ml {command}' Enter"
+            subprocess.run(tmux_command, shell=True, check=True)
+
+            console.log(f"[INFO] Command '{command}' running in tmux session '{pane_name}'.")
         except subprocess.CalledProcessError as e:
-            print(f"[ERROR] Download failed for {crunch_name}: {e}")
-            return False
+            console.log(f"[ERROR] Failed to run command in tmux: {e}")
+        except Exception as e:
+            console.log(f"[ERROR] Unexpected error while running command in tmux: {e}")
 
-    def process_crunch(self, crunch_name: str, dry_run: bool = False) -> float:
+    def process_crunches_parallel(self, commands, max_workers=3):
         """
-        Process a single Crunch, downloading its data in parallel.
+        Process all Crunches in parallel using `tmux`.
 
         Args:
-            crunch_name (str): Name of the Crunch.
-            dry_run (bool): If True, simulate the download.
-
-        Returns:
-            float: The runtime for processing this Crunch in seconds.
+            commands (list): List of Crunch commands to execute.
+            max_workers (int): Maximum number of workers for parallel execution.
         """
-        config = self.config_loader.get_crunch_setting(crunch_name, "paths")
-        competition_name = self.config_loader.get_crunch_setting(crunch_name, "crunch_type")
-        project_name = self.config_loader.get_crunch_setting(crunch_name, "name")
-        dataset_size = self.config_loader.get_crunch_setting(crunch_name, "dataset_size", "default")
-        output_dir = config["project_dir"]
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TimeRemainingColumn(),
+            console=console,
+        ) as progress:
+            tasks = {cmd: progress.add_task(f"[cyan]{cmd.split()[2]}", total=100) for cmd in commands}
 
-        if self.manifest_manager.is_downloaded(crunch_name, output_dir):
-            print(f"[✔] {crunch_name} already downloaded. Skipping.")
-            return 0
+            def run_crunch(cmd):
+                pane_name = cmd.split()[2]  # Use the competition type (e.g., broad-1) as the pane name
+                self.run_command_in_tmux(cmd, pane_name)
 
-        print(f"Processing {crunch_name}...")
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(run_crunch, cmd): cmd for cmd in commands}
+                for future in futures:
+                    try:
+                        future.result()  # Wait for all tmux commands to initialize
+                        console.log(f"[INFO] Command submitted to tmux: {futures[future]}")
+                    except Exception as e:
+                        console.log(f"[ERROR] Failed to process command: {e}")
 
-        token = self.token_handler.get_token(1)  # Adjust for token retrieval logic.
-
-        start_time = time.time()
-        success = self.download_data(
-            crunch_name=crunch_name,
-            competition_name=competition_name,
-            project_name=project_name,
-            dataset_size=dataset_size,
-            token=token,
-            output_dir=output_dir,
-            dry_run=dry_run,
-        )
-        runtime = time.time() - start_time
-
-        if success:
-            size = self.manifest_manager.calculate_directory_size(output_dir) if os.path.exists(output_dir) else 0
-            self.manifest_manager.update_manifest(crunch_name, output_dir, "downloaded", size)
-            print(f"[✔] Successfully processed {crunch_name} in {runtime:.2f} seconds.")
-        else:
-            print(f"[✘] Failed to process {crunch_name}.")
-
-        return runtime
-
-    def process_all(self, dry_run: bool = False):
+    def download_crunches(self):
         """
-        Process all Crunches using inter-crunch parallelism.
-
-        Args:
-            dry_run (bool): If True, simulate the download.
+        Main method to process and download all Crunches.
         """
         crunches = self.config_loader.config.get("crunches", {})
         if not crunches:
-            print("[ERROR] No Crunch configurations found.")
+            console.log("[ERROR] No Crunch configurations found.")
             return
 
-        total_runtime = 0
-        success_count = 0
-        failure_count = 0
-        skipped_count = 0
+        # Prompt for tokens
+        tokens = [
+            input(f"Enter token for {crunch_name} ({config['name']}): ").strip()
+            for crunch_name, config in crunches.items()
+        ]
+        self.write_tokens_to_file(tokens)
 
-        def process_crunch_wrapper(crunch_name: str):
-            try:
-                return self.process_crunch(crunch_name, dry_run=dry_run)
-            except Exception as e:
-                print(f"[ERROR] Error processing {crunch_name}: {e}")
-                return None
+        # Construct Crunch commands
+        commands = []
+        for idx, (crunch_name, config) in enumerate(crunches.items()):
+            competition_name = config["crunch_type"]
+            project_name = config["name"]
+            dataset_size = config["dataset_size"]
+            output_dir = config["paths"]["project_dir"]
+            token = tokens[idx]
+            commands.append(
+                f"crunch setup {competition_name} {project_name} {output_dir} --token {token} --size {dataset_size} --force"
+            )
 
-        with ThreadPoolExecutor() as executor:
-            futures = {executor.submit(process_crunch_wrapper, crunch_name): crunch_name for crunch_name in crunches}
-
-            with tqdm(total=len(futures), desc="Processing All Crunches", unit="Crunch", dynamic_ncols=True) as pbar:
-                for future in as_completed(futures):
-                    crunch_name = futures[future]
-                    try:
-                        runtime = future.result()
-                        if runtime is not None:
-                            if runtime > 0:
-                                total_runtime += runtime
-                                success_count += 1
-                                print(f"[INFO] {crunch_name} completed in {runtime:.2f} seconds.")
-                            else:
-                                skipped_count += 1
-                        else:
-                            failure_count += 1
-                        pbar.update(1)
-                    except Exception as e:
-                        print(f"[ERROR] {crunch_name} failed: {e}")
-                        failure_count += 1
-                        pbar.update(1)
-
-        # Summary
-        print("\n--- Summary ---")
-        print(f"Total runtime: {total_runtime:.2f} seconds.")
-        print(f"Crunches successfully processed: {success_count}")
-        print(f"Crunches failed: {failure_count}")
-        print(f"Crunches skipped (already downloaded): {skipped_count}")
+        self.process_crunches_parallel(commands)
 
     def update_manifest(self):
         """
         Update the manifest with the current state of all Crunch directories.
         """
-        config = self.config_loader.config
-        self.manifest_manager.update_from_config(config)
+        console.log("[INFO] Updating manifest (not implemented in this version).")
 
 
 def main():
     """
     Main entry point for the CrunchDownloader script.
     """
-    config_path = "../../config.yaml"
-    manifest_path = "manifest.json"
+    config_path = "config.yaml"
+    downloader = CrunchDownloader(config_path)
 
-    downloader = CrunchDownloader(config_path, manifest_path)
+    action = input("Enter action: 'download' or 'update_manifest': ").strip()
 
-    dry_run = input("Enable dry-run mode? (y/n): ").strip().lower() == "y"
-
-    action = input("Enter action: 'all', 'update_manifest', or Crunch name (e.g., 'crunch1'): ").strip()
-    if action == "all":
-        downloader.process_all(dry_run=dry_run)
+    if action == "download":
+        downloader.download_crunches()
     elif action == "update_manifest":
         downloader.update_manifest()
-    elif action in downloader.config_loader.config.get("crunches", {}):
-        downloader.process_crunch(action, dry_run=dry_run)
     else:
-        print(f"[ERROR] Invalid action: {action}")
+        console.log(f"[ERROR] Invalid action: {action}")
 
 
 if __name__ == "__main__":

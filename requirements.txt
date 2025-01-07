@@ -55,5 +55,5 @@ plotly~=5.24.1
 
 PyYAML~=6.0.2           # YAML parser for configuration files
 tqdm~=4.67.1            # Progress bar for loops
-
+rich                    # Rich text formatting for console output
 joblib~=1.4.2           # Joblib for parallel computing
