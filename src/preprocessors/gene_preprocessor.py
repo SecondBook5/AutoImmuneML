@@ -1,21 +1,14 @@
 # File: src/preprocessors/gene_preprocessor.py
-# File: src/preprocessors/gene_preprocessor.py
-
-import os
-import scanpy as sc
-import pandas as pd
-import numpy as np
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
-from typing import Dict
-from src.preprocessors.base_preprocessor import BasePreprocessor
+import scanpy as sc  # For handling and preprocessing gene expression data
+import pandas as pd  # For tabular data representation
+from sklearn.cluster import KMeans  # For clustering
+from typing import Dict, Union  # For type annotations
+from src.preprocessors.base_preprocessor import BasePreprocessor  # Base class for preprocessors
 
 
 class GenePreprocessor(BasePreprocessor):
     """
-    Preprocessor for gene expression data to prepare data for downstream analysis and modeling.
+    Preprocessor for gene expression data to prepare it for downstream analysis and modeling.
 
     **Concepts**:
     - Gene expression data contains high dimensionality and noise, requiring normalization
@@ -24,62 +17,118 @@ class GenePreprocessor(BasePreprocessor):
     - Clustering groups similar cells based on expression profiles to infer biological insights.
 
     Features:
+    - Validation of input data integrity before processing.
     - Normalization of raw counts to account for sequencing depth differences.
     - Dimensionality reduction using PCA, t-SNE, and UMAP.
     - K-means clustering for identifying cell populations.
     """
 
-    def preprocess(self, sdata, **kwargs) -> Dict[str, pd.DataFrame]:
+    def __init__(self, output_dir: str):
+        """
+        Initialize the GenePreprocessor.
+
+        Args:
+            output_dir (str): Directory to save processed data.
+        """
+        # Call the parent class constructor to initialize the output directory
+        super().__init__(output_dir)
+
+    def validate(self, sdata: sc.AnnData) -> bool:
+        """
+        Validate the input AnnData object for required attributes.
+
+        Args:
+            sdata (sc.AnnData): Input AnnData object containing gene expression data.
+
+        Returns:
+            bool: True if validation passes, False otherwise.
+
+        Raises:
+            ValueError: If the input data is missing required attributes or is invalid.
+        """
+        # Ensure the AnnData object contains the required attributes
+        if not hasattr(sdata, "var") or not hasattr(sdata, "layers"):
+            raise ValueError("Input data is missing required attributes `var` and/or `layers`.")
+        if "counts" not in sdata.layers:
+            raise ValueError("The input data does not contain the expected `counts` layer.")
+        if "gene_symbols" not in sdata.var:
+            raise ValueError("The input data does not contain `gene_symbols` in `var`.")
+
+        # Return True if validation is successful
+        return True
+
+    def preprocess(self, sdata: sc.AnnData, **kwargs) -> Dict[str, Union[pd.DataFrame, sc.AnnData]]:
         """
         Preprocess gene expression data with normalization, dimensionality reduction, and clustering.
 
         Args:
-            sdata: A SpatialData object containing gene expression data (`anucleus`).
+            sdata (sc.AnnData): Input AnnData object containing gene expression data.
             kwargs: Additional arguments, such as `output_filename` for saving processed data.
 
         Returns:
-            Dict[str, pd.DataFrame]: Processed outputs including:
-                - Normalized AnnData
+            Dict[str, Union[pd.DataFrame, sc.AnnData]]: Processed outputs including:
+                - Raw counts
                 - PCA results
                 - t-SNE results
                 - UMAP results
                 - Cluster labels
+
+        Raises:
+            ValueError: If input validation fails.
+            RuntimeError: For any processing step failures.
         """
-        # Extract gene names from `anucleus` for consistency in downstream analyses.
-        print("Extracting gene names...")
-        gene_name_list = sdata['anucleus'].var['gene_symbols'].values
+        # Step 1: Validate the input data integrity
+        self.validate(sdata)
 
-        # Create DataFrame for raw counts from `anucleus` layers.
-        print("Extracting raw counts...")
-        raw_counts_df = pd.DataFrame(
-            sdata['anucleus'].layers['counts'],
-            columns=gene_name_list
-        )
+        # Step 2: Extract raw counts and gene names
+        try:
+            print("Extracting raw counts and gene names...")
+            # Extract gene names from the input AnnData object
+            gene_name_list = sdata.var['gene_symbols'].values
 
-        # Normalize and filter the raw expression data.
-        print("Filtering and normalizing data...")
-        normalized_adata = self._filter_and_normalize(sdata['anucleus'])
+            # Extract raw counts as a DataFrame for downstream use
+            raw_counts_df = pd.DataFrame(sdata.layers['counts'], columns=gene_name_list)
+        except Exception as e:
+            raise RuntimeError(f"Failed to extract raw counts or gene names: {e}")
 
-        # Extract PCA-transformed data for dimensionality reduction.
-        print("Applying PCA...")
-        pca_results = self._apply_pca(normalized_adata)
+        # Step 3: Normalize and filter the raw data
+        try:
+            print("Filtering and normalizing data...")
+            normalized_adata = self._filter_and_normalize(sdata)
+        except Exception as e:
+            raise RuntimeError(f"Failed during filtering and normalization: {e}")
 
-        # Extract t-SNE results for non-linear dimensionality reduction.
-        print("Applying t-SNE...")
-        tsne_results = self._apply_tsne(normalized_adata)
+        # Step 4: Perform dimensionality reduction
+        try:
+            # Extract PCA-transformed data for dimensionality reduction.
+            print("Applying PCA...")
+            pca_results = self._apply_pca(normalized_adata)
 
-        # Extract UMAP results for dimensionality reduction.
-        print("Applying UMAP...")
-        umap_results = self._apply_umap(normalized_adata)
+            # Extract t-SNE results for non-linear dimensionality reduction.
+            print("Applying t-SNE...")
+            tsne_results = self._apply_tsne(normalized_adata)
 
-        # Perform K-means clustering for exploratory cell population analysis.
-        print("Performing clustering...")
-        clusters = self._apply_clustering(normalized_adata)
+            # Extract UMAP results for dimensionality reduction.
+            print("Applying UMAP...")
+            umap_results = self._apply_umap(normalized_adata)
+        except Exception as e:
+            raise RuntimeError(f"Failed during dimensionality reduction: {e}")
 
-        # Save the processed AnnData file for reuse.
+        # Step 5: Perform K-means clustering for exploratory cell population analysis.
+        try:
+            print("Performing clustering...")
+            clusters = self._apply_clustering(normalized_adata)
+        except Exception as e:
+            raise RuntimeError(f"Failed during clustering: {e}")
+
+        # Step 6: Save processed outputs
         output_filename = kwargs.get("output_filename", "preprocessed_genes.h5ad")
-        self.save(normalized_adata, output_filename)
+        try:
+            self.save(normalized_adata, output_filename)
+        except Exception as e:
+            raise RuntimeError(f"Failed to save processed data: {e}")
 
+        # Return processed results in a dictionary
         return {
             "raw_counts": raw_counts_df,
             "pca": pca_results,
@@ -103,18 +152,19 @@ class GenePreprocessor(BasePreprocessor):
         Returns:
             sc.AnnData: Filtered and normalized AnnData object.
         """
-        # Filter genes expressed in fewer than 5 cells.
+        # Remove genes expressed in fewer than 5 cells
         sc.pp.filter_genes(adata, min_counts=5)
 
-        # Filter cells with fewer than 200 genes expressed.
+        # Remove cells with fewer than 200 genes expressed
         sc.pp.filter_cells(adata, min_genes=200)
 
-        # Normalize expression counts to 10,000 counts per cell.
+        # Normalize the total gene expression per cell to 10,000 counts
         sc.pp.normalize_total(adata, target_sum=1e4)
 
-        # Apply log1p transformation to stabilize variance.
+        # Apply log1p transformation to stabilize variance
         sc.pp.log1p(adata)
 
+        # Return the filtered and normalized data
         return adata
 
     def _apply_pca(self, adata: sc.AnnData, n_components: int = 50) -> pd.DataFrame:
@@ -130,12 +180,12 @@ class GenePreprocessor(BasePreprocessor):
             n_components (int): Number of principal components to compute.
 
         Returns:
-            pd.DataFrame: DataFrame containing the top principal components.
+            pd.DataFrame: PCA-transformed data.
         """
-        # Perform PCA using AnnData's built-in function.
+        # Run PCA to compute the top `n_components` principal components
         sc.tl.pca(adata, n_comps=n_components)
 
-        # Convert PCA results to a DataFrame for easy access.
+        # Convert the PCA results into a DataFrame for easier handling
         return pd.DataFrame(
             adata.obsm["X_pca"],
             index=adata.obs.index,
@@ -153,15 +203,15 @@ class GenePreprocessor(BasePreprocessor):
         Args:
             adata (sc.AnnData): AnnData object after PCA.
             n_components (int): Number of dimensions for t-SNE.
-            perplexity (int): Parameter controlling local-global tradeoff.
+            perplexity (int): Perplexity parameter for balancing local/global structure.
 
         Returns:
-            pd.DataFrame: DataFrame containing the t-SNE-transformed data.
+            pd.DataFrame: t-SNE-transformed data.
         """
-        # Perform t-SNE using AnnData's built-in function.
+        # Apply t-SNE on the PCA-transformed data
         sc.tl.tsne(adata, n_pcs=50, perplexity=perplexity)
 
-        # Convert t-SNE results to a DataFrame.
+        # Convert the t-SNE results into a DataFrame for easier handling
         return pd.DataFrame(
             adata.obsm["X_tsne"],
             index=adata.obs.index,
@@ -181,12 +231,12 @@ class GenePreprocessor(BasePreprocessor):
             n_components (int): Number of dimensions for UMAP.
 
         Returns:
-            pd.DataFrame: DataFrame containing the UMAP-transformed data.
+            pd.DataFrame: UMAP-transformed data.
         """
-        # Perform UMAP using AnnData's built-in function.
+        # Apply UMAP on the PCA-transformed data
         sc.tl.umap(adata, n_components=n_components)
 
-        # Convert UMAP results to a DataFrame.
+        # Convert the UMAP results into a DataFrame for easier handling
         return pd.DataFrame(
             adata.obsm["X_umap"],
             index=adata.obs.index,
@@ -208,11 +258,12 @@ class GenePreprocessor(BasePreprocessor):
         Returns:
             pd.Series: Cluster labels for each cell.
         """
-        # Fit K-means clustering on PCA-transformed data.
+        # Fit K-means clustering on the PCA-transformed data
         kmeans = KMeans(n_clusters=n_clusters, random_state=42)
         cluster_labels = kmeans.fit_predict(adata.obsm["X_pca"])
 
-        # Store cluster labels in AnnData's observations.
+        # Store the cluster labels in the AnnData object's observations
         adata.obs["kmeans_clusters"] = cluster_labels
 
+        # Return the cluster labels as a Pandas Series
         return pd.Series(cluster_labels, index=adata.obs.index)
