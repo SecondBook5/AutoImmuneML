@@ -1,4 +1,4 @@
-# File: src/preprocessors/spatial_preprocessor.py
+# File: src/preprocessors/image_preprocessor.py
 import os
 import numpy as np
 import tifffile
