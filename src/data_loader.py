@@ -1,4 +1,5 @@
 # File: src/data_loader.py
+import os
 import pandas as pd  # For handling .csv files
 import anndata as ad  # For handling .h5ad files
 from tqdm import tqdm  # For progress tracking
@@ -10,6 +11,7 @@ from src.loaders.zarr_loader import ZARRLoader  # Loader for .zarr files
 from src.loaders.csv_loader import CSVLoader  # Loader for .csv files
 from src.config.config_loader import ConfigLoader  # Configuration loader
 from src.utils.path_validator import PathValidator  # Path validation utility
+from src.validators.zarr_validator import ZARRValidator  # Validator for .zarr datasets
 
 
 class DataLoader:
@@ -65,6 +67,9 @@ class DataLoader:
         """
         # Retrieve the path for the specified key from the configuration
         path = self.config.get_crunch_path(self.crunch_name, key)
+
+        # Log the retrieved path for debugging
+        print(f"[DEBUG] Retrieved path for key '{key}': {path}")
 
         # Check if the path is None and log an appropriate error
         if not path:
@@ -140,6 +145,8 @@ class DataLoader:
 
         Args:
             keys (Union[str, List[str]]): A single Zarr key or a list of keys to load.
+                - If a key points to a directory, validate and load all `.zarr` datasets in the directory.
+                - If a key points to a specific `.zarr` directory, validate and load that dataset.
 
         Returns:
             Dict[str, Any]: A dictionary of Zarr datasets, keyed by their names or paths.
@@ -148,38 +155,49 @@ class DataLoader:
         if isinstance(keys, str):
             keys = [keys]
 
-        # Initialize a dictionary to store loaded Zarr datasets
+        # Initialize a dictionary to store the loaded Zarr datasets
         zarr_datasets = {}
 
-        # Use ThreadPoolExecutor for parallel processing of Zarr files
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # Submit tasks for loading each Zarr key using the specified loader
-            futures = {
-                executor.submit(self._load_with_loader, key, ZARRLoader): key
-                for key in keys
-            }
+        # Iterate through each key to process and load Zarr datasets
+        for key in keys:
+            try:
+                # Validate the key path (directory or specific .zarr dataset)
+                path = self.validate_path(key, is_file=False)  # Allow directories and .zarr datasets
 
-            # Process completed futures using tqdm for progress tracking
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Loading Zarr files"):
-                key = futures[future]
-                try:
-                    # Attempt to retrieve the result of the future
-                    result = future.result()
-
-                    # If the result is a dictionary, it indicates multiple Zarr groups
-                    if isinstance(result, dict):
-                        # Merge the loaded groups into the main dataset dictionary
-                        zarr_datasets.update(result)
+                # Determine if the path points to a single .zarr dataset or a directory
+                if os.path.isdir(path) and path.endswith(".zarr"):
+                    # Single Zarr dataset: Validate and load it
+                    validator = ZARRValidator(path)
+                    validation_result = validator.validate()
+                    # Load the dataset if validation passes
+                    if validation_result["status"] == "valid":
+                        zarr_datasets[os.path.basename(path)] = ZARRLoader(path).load()
                     else:
-                        # Otherwise, store the single Zarr group under the specified key
-                        zarr_datasets[key] = result
-                except Exception as e:
-                    # Log any errors encountered while loading Zarr files
-                    self.path_validator.logger.error(f"Error loading Zarr file {key}: {e}")
+                        # Log validation errors and skip loading
+                        self.path_validator.logger.error(
+                            f"Validation failed for {path}: {validation_result['errors']}"
+                        )
+                elif os.path.isdir(path):
+                    # Directory: Validate and load all .zarr datasets in the directory
+                    validator = ZARRValidator(path)
+                    validation_result = validator.validate()
+                    if validation_result["status"] == "valid":
+                        zarr_datasets.update(ZARRLoader(path).load())
+                    else:
+                        # Log validation errors and skip loading
+                        self.path_validator.logger.error(
+                            f"Validation failed for {path}: {validation_result['errors']}"
+                        )
+                else:
+                    # Raise an error for invalid paths
+                    raise ValueError(f"Invalid path: {path}. Must point to a .zarr dataset or a directory.")
 
-        # Return the dictionary containing all loaded Zarr datasets
+            except Exception as e:
+                # Log errors encountered during the process
+                self.path_validator.logger.error(f"Error processing Zarr key '{key}': {e}")
+
+        # Return the dictionary of all loaded Zarr datasets
         return zarr_datasets
-
 
     ### 4. Streaming for Large Datasets ###
     def stream_csv(self, key: str, chunk_size: int = None) -> Generator[pd.DataFrame, None, None]:

@@ -5,6 +5,7 @@ import os  # For file and directory operations
 import yaml  # For parsing YAML configuration files
 import logging  # For structured logging
 from typing import Dict  # For more explicit type annotations
+from src.validators.zarr_validator import ZARRValidator  # For validating Zarr datasets
 
 class PathValidator:
     """
@@ -28,22 +29,24 @@ class PathValidator:
 
     def _setup_logger(self) -> logging.Logger:
         """
-        Setup a logger for structured output.
+        Setup a logger for structured output. Reuses the logger if already set up.
 
         Returns:
             logging.Logger: Configured logger instance.
         """
-        # Create a logger instance
+        # Create or get the logger for "PathValidator"
         logger = logging.getLogger("PathValidator")
-        # Define a stream handler for logging to console
-        handler = logging.StreamHandler()
-        # Set the log format to include level and message
-        formatter = logging.Formatter("[%(levelname)s] %(message)s")
-        handler.setFormatter(formatter)
-        # Add the handler to the logger
-        logger.addHandler(handler)
-        # Set the default logging level to INFO
-        logger.setLevel(logging.INFO)
+        # Ensure no duplicate handlers are added
+        if not logger.hasHandlers():
+            # Define a stream handler for console output
+            handler = logging.StreamHandler()
+            # Set the log format to include level and message
+            formatter = logging.Formatter("[%(levelname)s] %(message)s")
+            handler.setFormatter(formatter)
+            # Add the handler to the logger
+            logger.addHandler(handler)
+            # Set the default logging level to INFO
+            logger.setLevel(logging.INFO)
         return logger
 
     def _load_config(self) -> Dict:
@@ -69,37 +72,47 @@ class PathValidator:
             # Raise a value error if the YAML file cannot be parsed
             raise ValueError(f"Error parsing YAML file: {e}")
 
-    def ensure_path(self, path: str, is_file: bool = False) -> bool:
+    def ensure_path(self, path: str, is_file: bool = False, is_zarr: bool = False) -> bool:
         """
-        Ensure a path is valid: check for files or create directories as needed.
+        Ensure a path is valid: check for files, directories, or `.zarr` datasets.
 
         Args:
             path (str): Path to check or create.
-            is_file (bool): Whether the path is a file (default: False).
+            is_file (bool): Whether the path is expected to be a file (default: False).
+            is_zarr (bool): Whether the path is expected to be a `.zarr` directory (default: False).
 
         Returns:
             bool: True if the path is valid or created, False otherwise.
         """
         # Check if the path exists
         if os.path.exists(path):
-            # If the path is supposed to be a file but is not, log an error
+            # Validate if the path is a file but is not
             if is_file and not os.path.isfile(path):
                 self.logger.error(f"Path exists but is not a file: {path}")
                 return False
-            # If the path is supposed to be a directory but is not, log an error
-            if not is_file and not os.path.isdir(path):
+            # Validate if the path is a `.zarr` directory but is not
+            if is_zarr and (not os.path.isdir(path) or not path.endswith(".zarr")):
+                self.logger.error(f"Path exists but is not a valid `.zarr` directory: {path}")
+                return False
+            # Validate if the path is a directory but is not
+            if not is_file and not is_zarr and not os.path.isdir(path):
                 self.logger.error(f"Path exists but is not a directory: {path}")
                 return False
-            # Log a success message if the path is valid
-            self.logger.info(f"Valid {'file' if is_file else 'directory'}: {path}")
+            # Log success if the path is valid
+            self.logger.info(f"Valid {'file' if is_file else 'zarr dataset' if is_zarr else 'directory'}: {path}")
             return True
 
-        # If the path is supposed to be a file but does not exist, log a warning
+        # Warn if the required file is missing
         if is_file:
             self.logger.warning(f"Missing required file: {path}")
             return False
 
-        # If the path is supposed to be a directory, create it
+        # Warn if the required `.zarr` directory is missing
+        if is_zarr:
+            self.logger.error(f"Missing required `.zarr` directory: {path}")
+            return False
+
+        # Create the directory if it's missing
         os.makedirs(path, exist_ok=True)
         # Log a success message after creating the directory
         self.logger.info(f"Created directory: {path}")
@@ -108,20 +121,44 @@ class PathValidator:
     def validate_paths(self) -> None:
         """
         Validate and ensure all paths in the configuration file exist.
+        Skips non-path keys and validates only paths.
         """
         # Log the start of global path validation
         self.logger.info("Validating global paths...")
-        # Iterate through global paths in the configuration and validate each
+
+        # Validate global paths
         for key, path in self.config.get("global", {}).items():
+            # Skip non-path keys (e.g., max_workers, batch_size)
+            if not isinstance(path, (str, os.PathLike)):
+                self.logger.debug(f"Ignoring non-path key: {key}")
+                continue
+            # Validate the path (file or directory)
             self.ensure_path(path, is_file=key.endswith("_file"))
 
-        # Iterate through Crunch-specific configurations
+        # Validate paths for each Crunch
         for crunch_name, crunch_config in self.config.get("crunches", {}).items():
-            # Log the start of validation for the specific Crunch
+            # Log the start of validation for this Crunch
             self.logger.info(f"Validating paths for {crunch_name}...")
             # Validate each path in the Crunch-specific configuration
             for key, path in crunch_config.get("paths", {}).items():
-                self.ensure_path(path, is_file=key.endswith("_file"))
+                # Skip non-path keys (e.g., batch_size)
+                if not isinstance(path, (str, os.PathLike)):
+                    self.logger.debug(f"Ignoring non-path key: {key}")
+                    continue
+
+                # Determine if this path is a `.zarr` directory or file
+                is_zarr = key.endswith(".zarr") or "_zarr" in key
+                # Validate the path
+                if self.ensure_path(path, is_file=key.endswith("_file"), is_zarr=is_zarr) and is_zarr:
+                    self.logger.info(f"Validating `.zarr` structure for {path}...")
+                    # Use ZARRValidator to validate `.zarr` structure
+                    validator = ZARRValidator(path)
+                    validation_result = validator.validate()
+                    if validation_result["status"] == "invalid":
+                        self.logger.error(f"Validation failed for `.zarr`: {path}")
+                        for error in validation_result["errors"]:
+                            self.logger.error(f"  - {error}")
+
 
 if __name__ == "__main__":
     import argparse  # For parsing command-line arguments

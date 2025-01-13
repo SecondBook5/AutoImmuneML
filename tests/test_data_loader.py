@@ -1,3 +1,4 @@
+# File: tests/test_data_loader.py
 import pytest
 import pandas as pd
 import numpy as np
@@ -88,9 +89,6 @@ def test_load_zarr(data_loader):
     assert "HE_original" in loaded_data.images.keys(), "'HE_original' not found in images."
     assert "anucleus" in loaded_data.tables.keys(), "'anucleus' not found in tables."
     assert "cell_id-group" in loaded_data.tables.keys(), "'cell_id-group' not found in tables."
-
-
-
 
 
 def test_stream_csv(data_loader):

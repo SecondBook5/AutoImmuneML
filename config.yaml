@@ -7,7 +7,9 @@ global:
   token_file: "/home/secondbook5/projects/AutoImmuneML/.crunchdao/token"  # Crunch token file location (shared)
   base_dir: "/home/secondbook5/projects/AutoImmuneML"                    # Base directory for code and logs in WSL2
   src_dir: "/home/secondbook5/projects/AutoImmuneML/src"                 # Reusable Python scripts directory (shared)
-  data_dir: "/mnt/d/AutoImmuneML"                                        # Shared base directory for data storage
+  data_dir: "/mnt/d/AutoImmuneML"
+  max_workers: 4                                                         # Default number of workers for parallel tasks
+  batch_size: 2  # Shared base directory for data storage
 
 # Crunch-specific settings
 crunches:
