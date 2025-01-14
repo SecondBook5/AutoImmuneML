@@ -1,0 +1,72 @@
+name: autoimmune_ml
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  # Core Libraries
+  - numpy
+  - pandas
+  - scipy
+
+  # Machine Learning and Deep Learning
+  - scikit-learn
+  - pytorch
+  - pytorch-lightning
+  - torchmetrics
+  - umap-learn
+  - shap
+  - lime
+
+  # Bioinformatics
+  - biopython
+  - scanpy
+  - anndata
+  - spatialdata
+  - spatialdata-io
+  - spatialdata-plot
+
+  # Image and Spatial Processing
+  - scikit-image
+  - opencv-python
+  - imageio
+  - imagecodecs
+  - tifffile
+  - ome-zarr
+  - spatial-image
+  - multiscale-spatial-image
+
+  # Visualization
+  - matplotlib
+  - seaborn
+  - plotly
+  - bokeh
+
+  # Distributed and Parallel Computing
+  - dask
+  - distributed
+  - dask-expr
+
+  # Utilities
+  - joblib
+  - tqdm
+  - pyyaml
+  - rich
+  - zarr
+  - zict
+  - fsspec
+  - requests
+  - filelock
+  - threadpoolctl
+  - protobuf
+
+  # Python Environment Management
+  - pip
+  - python=3.11
+
+  # Additional Pip Dependencies
+  - pip:
+    - crunch-cli==5.8.2
+    - tensorflow_cpu==2.18.0
+
+prefix: "/home/secondbook5/micromamba/envs/autoimmune_ml"

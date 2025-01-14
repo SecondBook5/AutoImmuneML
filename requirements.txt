@@ -1,59 +1,56 @@
 # Core Libraries
-numpy==1.26.4            # Numerical computing
-pandas==2.2.3            # Data manipulation
-scipy==1.14.1            # Scientific computing
+numpy                        # Numerical computing
+pandas                       # Data manipulation and analysis
+scipy                        # Scientific computing and optimization
 
 # Machine Learning and Deep Learning
-torch==2.5.1             # PyTorch library
-pytorch-lightning==2.4.0 # High-level wrapper for PyTorch
-tensorflow==2.17.0       # TensorFlow deep learning library
-scikit-learn==1.6.0      # Machine learning models and utilities
-umap-learn==0.5.7        # Dimensionality reduction (UMAP)
-shap==0.46.0             # SHAP for explainable AI
-timm                     # PyTorch image models
+scikit-learn                 # Machine learning models and utilities
+pytorch                      # PyTorch deep learning framework
+torchmetrics                 # Metrics library for PyTorch
+tensorflow-cpu               # TensorFlow deep learning framework (CPU version)
+umap-learn                   # Dimensionality reduction with UMAP
+shap                         # Explainable AI (SHAP values for ML models)
+lime                         # Model interpretation and visualization
+pytorch-lightning            # High-level wrapper for PyTorch
 
 # Bioinformatics
-biopython==1.84          # Bioinformatics tools for biological data
-scanpy==1.10.4           # Single-cell RNA analysis (relies on anndata)
-anndata                  # AnnData structure for single-cell omics
-squidpy                  # Spatial omics data analysis (requires scanpy)
-spatialdata              # General toolkit for spatial omics data
+biopython                    # Tools for biological data analysis
+scanpy                       # Single-cell RNA analysis
+anndata                      # AnnData structure for single-cell omics data
+spatialdata                  # Toolkit for spatial omics data
+spatialdata-io               # Input/output support for spatial omics data
+spatialdata-plot             # Static plotting for spatial omics data
 
-# Image and Spatial Libraries
-scikit-image             # Image processing tools
-opencv-python==4.10.0.84 # OpenCV for image processing
-imageio==2.36.1          # Reading/writing images
-imagecodecs==2024.6.1    # Image compression/decompression codecs
-ome-zarr==0.9.0          # Zarr format for microscopy data
-zarr==2.18.3             # Hierarchical storage for large datasets
-tifffile~=2024.9.20
+# Image and Spatial Processing
+scikit-image                 # Image processing tools
+opencv                       # OpenCV for image processing (headless version)
+imageio                      # Reading/writing images
+imagecodecs                  # Image compression and decompression codecs
+tifffile                     # TIFF file reading/writing
+ome-zarr                     # Zarr format for microscopy data
+spatial-image                # Data model for spatial images
+multiscale-spatial-image     # Multiscale spatial image handling
 
 # Visualization
-matplotlib==3.9.3        # Visualization library
-seaborn==0.13.2          # Statistical data visualization
-lime==0.2.0.1            # Model interpretation (visualization)
-
-# Utilities
-absl-py==2.1.0           # TensorFlow dependency (abstraction layer)
-black==24.10.0           # Code formatter
-bleach==6.2.0            # HTML sanitization (Jupyter and visualization)
-cloudpickle==3.1.0       # Serialization of Python objects
-pydantic==2.10.3         # Data validation and settings management
-crunch-cli==5.7.3        # CrunchDAO CLI tool for data competitions
-h5py==3.12.1             # HDF5 format reader/writer
-pytest~=8.3.4            # Testing framework
+matplotlib                   # Plotting and visualization library
+seaborn                      # Statistical data visualization
+plotly                       # Interactive visualizations
+bokeh                        # Browser-based interactive visualizations
 
 # Distributed and Parallel Computing
-dask                     # Parallel and distributed computing
-distributed              # Task scheduling for Dask
+dask                         # Parallel and distributed computing
+distributed                  # Dask's task scheduler
+dask-expr                    # Expressions for optimized Dask computations
 
-# Interactive Tools
-ipykernel==6.29.5        # Jupyter kernel for interactive execution
-ipython==8.30.0          # Interactive Python shell
-jupyterlab==4.3.3        # JupyterLab IDE
-plotly~=5.24.1
-
-PyYAML~=6.0.2           # YAML parser for configuration files
-tqdm~=4.67.1            # Progress bar for loops
-rich                    # Rich text formatting for console output
-joblib~=1.4.2           # Joblib for parallel computing
+# Utilities
+joblib                       # Parallel processing utilities
+tqdm                         # Progress bar for loops
+pyyaml                       # YAML parser for configuration files
+rich                         # Rich text formatting for console output
+zarr                         # Hierarchical storage for large datasets
+zict                         # Dictionary-like object for cache and storage
+fsspec                       # File system specification for I/O
+requests                     # HTTP library for making requests
+filelock                     # File locking for concurrency
+threadpoolctl                # Thread control for optimized parallelism
+protobuf                     # Serialization format for structured data

@@ -13,17 +13,17 @@ else
     echo "No new pip dependencies to add to requirements.txt."
 fi
 
-# Update environment.yml
+# Update environment.yaml
 echo "Checking for new micromamba dependencies..."
 micromamba list --json | jq -r '.[] | "\(.name)=\(.version)"' > current_env.txt
 NEW_ENV=$(comm -13 <(sort environment_cleaned.txt) <(sort current_env.txt))
 
 if [[ ! -z "$NEW_ENV" ]]; then
-    echo -e "\n# New Dependencies" >> environment.yml
+    echo -e "\n# New Dependencies" >> environment.yaml
     while read -r line; do
         PACKAGE=$(echo "$line" | cut -d'=' -f1)
         VERSION=$(echo "$line" | cut -d'=' -f2)
-        echo "  - $PACKAGE=$VERSION" >> environment.yml
+        echo "  - $PACKAGE=$VERSION" >> environment.yaml
     done <<< "$NEW_ENV"
     echo "Updated environment.yml with new dependencies:"
     echo "$NEW_ENV"
