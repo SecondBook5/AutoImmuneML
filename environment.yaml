@@ -60,6 +60,14 @@ dependencies:
   - threadpoolctl
   - protobuf
 
+  # Development and Interactive Tools
+  - jupyterlab
+  - notebook
+  - ipykernel
+  - ipywidgets
+  - nbconvert
+  - nbclient
+
   # Python Environment Management
   - pip
   - python=3.11

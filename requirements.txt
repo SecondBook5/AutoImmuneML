@@ -23,7 +23,7 @@ spatialdata-plot             # Static plotting for spatial omics data
 
 # Image and Spatial Processing
 scikit-image                 # Image processing tools
-opencv                       # OpenCV for image processing (headless version)
+opencv                       # OpenCV for image processing
 imageio                      # Reading/writing images
 imagecodecs                  # Image compression and decompression codecs
 tifffile                     # TIFF file reading/writing
@@ -54,3 +54,11 @@ requests                     # HTTP library for making requests
 filelock                     # File locking for concurrency
 threadpoolctl                # Thread control for optimized parallelism
 protobuf                     # Serialization format for structured data
+
+# Development and Interactive Tools
+jupyterlab                   # Web-based interactive development environment
+notebook                     # Classic Jupyter Notebook interface
+ipykernel                    # Jupyter kernel for interactive execution
+ipywidgets                   # Interactive widgets for Jupyter notebooks
+nbconvert                    # Convert notebooks to other formats
+nbclient                     # Execute Jupyter notebooks programmatically
