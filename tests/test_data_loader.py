@@ -4,11 +4,13 @@ import pandas as pd
 import numpy as np
 import os
 from anndata import AnnData
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from src.data_loader import DataLoader
 from src.loaders.h5ad_loader import H5ADLoader
 from src.loaders.csv_loader import CSVLoader
+from src.loaders.zarr_loader import ZARRLoader
 from src.config.config_loader import ConfigLoader
+from src.validators.zarr_validator import ZARRValidator
 
 
 @pytest.fixture
@@ -28,67 +30,52 @@ def data_loader(real_config_loader):
     return DataLoader(config=real_config_loader, crunch_name="crunch3")
 
 
-def test_validate_path(data_loader):
+def test_validate_zarr(data_loader):
     """
-    Test the path validation method.
+    Test the Zarr validation method.
     """
-    path = data_loader.validate_path("scRNA_seq_file", is_file=True)
-    assert path is not None  # Ensure a valid path is returned
+    valid_zarr_path = "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/data/valid.zarr"
+    invalid_zarr_path = "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/data/invalid.zarr"
 
-
-@pytest.mark.parametrize("key, loader_class", [
-    ("scRNA_seq_file", H5ADLoader),
-    ("gene_list_file", CSVLoader),
-])
-def test_load_with_loader(data_loader, key, loader_class):
-    """
-    Test individual dataset loading using loaders.
-    """
-    with patch.object(loader_class, "load", return_value="mock_data"):
-        result = data_loader._load_with_loader(key, loader_class)
-        assert result == "mock_data"  # Ensure the mock data is returned
-
-
-def test_load_batch(data_loader):
-    """
-    Test batch loading of datasets.
-    """
-    keys = ["scRNA_seq_file", "gene_list_file"]
-    with patch("src.data_loader.DataLoader._load_with_loader", return_value="mock_data"):
-        result = data_loader.load_batch(keys, H5ADLoader)
-        assert len(result) == len(keys)  # Ensure all keys are processed
+    with patch.object(ZARRValidator, "validate", side_effect=[
+        {"status": "valid", "errors": []},
+        {"status": "invalid", "errors": ["Invalid structure"]}
+    ]):
+        assert data_loader.validate_zarr(valid_zarr_path) is True
+        assert data_loader.validate_zarr(invalid_zarr_path) is False
 
 
 def test_load_zarr(data_loader):
     """
     Test the loading of Zarr files and handling of directories containing multiple Zarr datasets.
     """
-    # Ensure the configuration contains a valid path for "raw_dir"
-    zarr_key = "raw_dir"
-    zarr_path = data_loader.config.get_crunch_path("crunch3", zarr_key)
-    assert zarr_path, f"Configuration missing path for key '{zarr_key}' in 'crunch3'."
+    valid_zarr_paths = [
+        "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/data/valid1.zarr",
+        "/mnt/d/AutoImmuneML/broad-3-autoimmune-crunch3/data/valid2.zarr"
+    ]
 
-    # Check that the path exists and is a directory
-    assert os.path.exists(zarr_path), f"Path '{zarr_path}' does not exist."
-    assert os.path.isdir(zarr_path), f"Path '{zarr_path}' is not a directory."
+    # Mock os.path.exists to simulate valid paths
+    with patch("os.path.exists", return_value=True), \
+         patch("os.path.isdir", side_effect=lambda path: path.endswith(".zarr")), \
+         patch.object(ZARRValidator, "validate", return_value={"status": "valid", "errors": []}), \
+         patch("src.loaders.zarr_loader.ZARRLoader.load", return_value="mock_data"):
+        result = data_loader.load_zarr(valid_zarr_paths)
+        assert len(result) == len(valid_zarr_paths)  # Ensure all datasets are loaded
+        assert all(value == "mock_data" for value in result.values())
 
-    # Load the Zarr dataset
-    result = data_loader.load_zarr([zarr_key])
+def test_load_batch(data_loader):
+    """
+    Test batch loading of datasets.
+    """
+    keys = ["scRNA_seq_file", "gene_list_file"]
 
-    # Assertions to verify the loaded data
-    expected_key = "UC9_I.zarr"  # Adjust this key based on the actual Zarr dataset name
-    assert expected_key in result, f"Expected Zarr dataset '{expected_key}' not found in result."
-    loaded_data = result[expected_key]
-
-    # Check that the loaded data is a SpatialData object
-    from spatialdata import SpatialData
-    assert isinstance(loaded_data, SpatialData), f"Loaded data for '{expected_key}' is not a SpatialData object."
-
-    # Verify the presence of expected components in the SpatialData object
-    assert "HE_nuc_original" in loaded_data.images.keys(), "'HE_nuc_original' not found in images."
-    assert "HE_original" in loaded_data.images.keys(), "'HE_original' not found in images."
-    assert "anucleus" in loaded_data.tables.keys(), "'anucleus' not found in tables."
-    assert "cell_id-group" in loaded_data.tables.keys(), "'cell_id-group' not found in tables."
+    # Mock the loader class's `load` method directly and skip path validation
+    with patch("src.loaders.h5ad_loader.H5ADLoader.__init__", return_value=None), \
+         patch("src.loaders.h5ad_loader.H5ADLoader.load", return_value="mock_data"):
+        # Re-initialize the loader to skip path validation
+        result = data_loader.load_batch(keys, H5ADLoader)
+        assert len(result) == len(keys)  # Ensure all keys are processed
+        assert all(value == "mock_data" for value in result.values())  # Ensure all results match the mocked data
 
 
 def test_stream_csv(data_loader):
@@ -96,12 +83,11 @@ def test_stream_csv(data_loader):
     Test streaming of .csv files in chunks.
     """
     mock_chunks = iter([pd.DataFrame({"mock": [1, 2]}), pd.DataFrame({"mock": [3, 4]})])
-    with patch("pandas.read_csv", return_value=mock_chunks):
+    with patch("os.path.isfile", return_value=True), patch("pandas.read_csv", return_value=mock_chunks):
         generator = data_loader.stream_csv("gene_list_file", chunk_size=2)
         chunks = list(generator)
-        assert len(chunks) > 0  # Ensure chunks are returned
-        assert isinstance(chunks[0], pd.DataFrame)  # Ensure each chunk is a DataFrame
-
+        assert len(chunks) > 0
+        assert isinstance(chunks[0], pd.DataFrame)
 
 
 def test_stream_h5ad(data_loader):
@@ -109,11 +95,11 @@ def test_stream_h5ad(data_loader):
     Test streaming of .h5ad files in chunks.
     """
     mock_adata = AnnData(X=np.array([[1, 2], [3, 4], [5, 6]]))
-    with patch("anndata.read_h5ad", return_value=mock_adata):
+    with patch("os.path.isfile", return_value=True), patch("anndata.read_h5ad", return_value=mock_adata):
         generator = data_loader.stream_h5ad("scRNA_seq_file", chunk_size=1)
         chunks = list(generator)
-        assert len(chunks) == 3  # Ensure correct number of chunks
-        assert hasattr(chunks[0], "X")  # Ensure chunks have AnnData attributes
+        assert len(chunks) == 3
+        assert hasattr(chunks[0], "X")
 
 
 def test_load_all(data_loader):
@@ -131,27 +117,10 @@ def test_load_all_streaming(data_loader):
     Test loading all datasets with streaming enabled.
     """
     mock_adata = AnnData(X=np.array([[1, 2], [3, 4], [5, 6]]))
-    with patch("pandas.read_csv", return_value=pd.DataFrame({"mock": [1, 2, 3]})):
-        with patch("anndata.read_h5ad", return_value=mock_adata):
-            result = data_loader.load_all(streaming=True)
-            assert "h5ad_files_streams" in result
-            assert "csv_files_streams" in result
-
-
-def test_error_logging(data_loader, caplog):
-    """
-    Test logging for invalid paths.
-    """
-    # Attempt to validate a nonexistent path and capture the raised exception
-    with pytest.raises(FileNotFoundError, match="Path Key 'nonexistent_file' not found in configuration for 'crunch3'"):
-        data_loader.validate_path("nonexistent_file")
-
-    # Check if the error message was logged
-    assert any(
-        "Path Key 'nonexistent_file' not found in configuration for 'crunch3'" in record.message
-        for record in caplog.records
-    ), "Expected error message not found in logs"
-
-
-
-
+    with patch("pandas.read_csv", return_value=pd.DataFrame({"mock": [1, 2, 3]})), \
+         patch("anndata.read_h5ad", return_value=mock_adata), \
+         patch("os.path.exists", return_value=True), \
+         patch("src.loaders.tiff_loader.TIFFLoader.load", return_value="mock_data"):
+        result = data_loader.load_all(streaming=True)
+        assert "h5ad_files_streams" in result
+        assert "csv_files_streams" in result

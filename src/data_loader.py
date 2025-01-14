@@ -44,6 +44,7 @@ class DataLoader:
         # Set the batch size for processing datasets, default to config value or 2
         self.batch_size = batch_size or self.config.get_global_setting("batch_size", 2)
 
+    ### 2. Zarr Validation and Loading ###
     def validate_zarr(self, path: str) -> bool:
         """
         Validate a `.zarr` dataset using ZARRValidator.
@@ -72,33 +73,64 @@ class DataLoader:
         Returns:
             Dict[str, Any]: A dictionary of Zarr datasets, keyed by their names.
         """
+        # Ensure paths is always a list for consistent processing
         if isinstance(paths, str):
             paths = [paths]
 
+        # Initialize a dictionary to store loaded Zarr datasets
         zarr_datasets = {}
+
+        # Initialize a list to hold all Zarr paths to process
+        zarr_paths_to_load = []
+
+        # Iterate over the provided paths and validate them
         for path in paths:
+            # Check if the path exists
+            if not os.path.exists(path):
+                print(f"[ERROR] Path does not exist: {path}")
+                continue
+            # If the path is a single `.zarr` directory, add it to the list
+            if os.path.isdir(path) and path.endswith(".zarr"):
+                zarr_paths_to_load.append(path)
+            # If the path is a directory, add all `.zarr` directories within it
+            elif os.path.isdir(path):
+                for item in os.listdir(path):
+                    item_path = os.path.join(path, item)
+                    if os.path.isdir(item_path) and item_path.endswith(".zarr"):
+                        zarr_paths_to_load.append(item_path)
+
+        # Define the function to load a single `.zarr` dataset
+        def load_single_zarr(zarr_path):
             try:
-                if not os.path.exists(path):
-                    raise FileNotFoundError(f"Path does not exist: {path}")
-
-                if os.path.isdir(path) and path.endswith(".zarr"):
-                    # Validate and load a single Zarr dataset
-                    if self.validate_zarr(path):
-                        zarr_datasets[os.path.basename(path)] = ZARRLoader(path).load()
-                elif os.path.isdir(path):
-                    # Validate and load all Zarr datasets in a directory
-                    for item in os.listdir(path):
-                        item_path = os.path.join(path, item)
-                        if os.path.isdir(item_path) and item_path.endswith(".zarr"):
-                            if self.validate_zarr(item_path):
-                                zarr_datasets[os.path.basename(item_path)] = ZARRLoader(item_path).load()
+                # Validate the Zarr dataset structure
+                if self.validate_zarr(zarr_path):
+                    # Load and return the dataset if validation passes
+                    return os.path.basename(zarr_path), ZARRLoader(zarr_path).load()
                 else:
-                    raise ValueError(f"Invalid Zarr path: {path}. Must point to a .zarr dataset or a directory.")
+                    # If validation fails, return None for the dataset
+                    return os.path.basename(zarr_path), None
             except Exception as e:
-                print(f"[ERROR] Error loading Zarr dataset at {path}: {e}")
+                # Log any exceptions encountered during loading
+                print(f"[ERROR] Failed to load Zarr dataset {zarr_path}: {e}")
+                # Return None for failed datasets
+                return os.path.basename(zarr_path), None
 
+        # Use ThreadPoolExecutor to load Zarr datasets in parallel
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Submit all Zarr paths for loading and track the futures
+            futures = {executor.submit(load_single_zarr, path): path for path in zarr_paths_to_load}
+            # Process the completed futures with a progress bar
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Loading Zarr files"):
+                # Retrieve the dataset name and data from the future result
+                dataset_name, data = future.result()
+                # If the dataset was loaded successfully, store it in the dictionary
+                if data is not None:
+                    zarr_datasets[dataset_name] = data
+
+        # Return the dictionary containing all loaded Zarr datasets
         return zarr_datasets
 
+    ### 3. Batch Loading ###
     def load_batch(self, keys: List[str], loader_class: Any) -> Dict[str, Any]:
         """
         Load a batch of datasets in parallel.
@@ -127,6 +159,7 @@ class DataLoader:
         # Return the dictionary of loaded datasets
         return results
 
+    ### 4. Streaming Support ###
     def stream_csv(self, path: str, chunk_size: int = None) -> Generator[pd.DataFrame, None, None]:
         """
         Stream a .csv file in chunks.

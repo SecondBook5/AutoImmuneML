@@ -15,12 +15,12 @@ timm                     # PyTorch image models
 # Bioinformatics
 biopython==1.84          # Bioinformatics tools for biological data
 scanpy==1.10.4           # Single-cell RNA analysis (relies on anndata)
-anndata==0.11.1          # AnnData structure for single-cell omics
-squidpy          # Spatial omics data analysis (requires scanpy)
-spatialdata==0.2.6       # General toolkit for spatial omics data
+anndata                  # AnnData structure for single-cell omics
+squidpy                  # Spatial omics data analysis (requires scanpy)
+spatialdata              # General toolkit for spatial omics data
 
 # Image and Spatial Libraries
-scikit-image==0.24.0     # Image processing tools
+scikit-image             # Image processing tools
 opencv-python==4.10.0.84 # OpenCV for image processing
 imageio==2.36.1          # Reading/writing images
 imagecodecs==2024.6.1    # Image compression/decompression codecs
@@ -44,8 +44,8 @@ h5py==3.12.1             # HDF5 format reader/writer
 pytest~=8.3.4            # Testing framework
 
 # Distributed and Parallel Computing
-dask==2024.12.0          # Parallel and distributed computing
-distributed==2024.12.0   # Task scheduling for Dask
+dask                     # Parallel and distributed computing
+distributed              # Task scheduling for Dask
 
 # Interactive Tools
 ipykernel==6.29.5        # Jupyter kernel for interactive execution
