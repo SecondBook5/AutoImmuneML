@@ -4,7 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 from spatialdata import SpatialData  # Mocked spatialdata for testing
-from src.spatialdata_handler import SpatialDataHandler
+from src.pipelines.spatialdata_handler import SpatialDataHandler
 from unittest.mock import MagicMock, patch
 
 # Fixtures for setup and teardown

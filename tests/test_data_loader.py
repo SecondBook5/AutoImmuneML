@@ -2,13 +2,10 @@
 import pytest
 import pandas as pd
 import numpy as np
-import os
 from anndata import AnnData
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from src.data_loader import DataLoader
 from src.loaders.h5ad_loader import H5ADLoader
-from src.loaders.csv_loader import CSVLoader
-from src.loaders.zarr_loader import ZARRLoader
 from src.config.config_loader import ConfigLoader
 from src.validators.zarr_validator import ZARRValidator
 
